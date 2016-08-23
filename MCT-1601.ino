@@ -1,4 +1,5 @@
-#include <EEPROM.h>
+#include <EEPROMVar.h>
+#include <EEPROMex.h>
 #include <ButtonCtl.h>
 #include <SoftwareSerial.h>
 #include <avr/wdt.h>
@@ -24,6 +25,7 @@
  
 // #define DEBUG_PRINT                       //@Print on Serial Port
 #define LONG_PRESS 10                     // Button Long Press
+#define LONG_LONG_PRESS 50                     // Button Long Long Press
 
 // UINT32_MAX
 #define UINT32_MAX  ((uint32_t)-1)
@@ -90,7 +92,7 @@
    Number of ADC samples to perform for each mesurement.
     - Valid values are in the range of 1 - 255.
 */
-#define ADC_SAMPLES 1
+#define ADC_SAMPLES 10
 
 // Estimated internal resistance of port to GND (in 0.1 Ohms)
 #define R_MCU_LOW 200                     // Default: 209
@@ -162,6 +164,16 @@
 #define FLAG_PULLUP   B00000001
 #define FLAG_1MS      B00001000
 #define FLAG_10MS     B00010000
+
+// EEPROM addresses
+#define CONFIG_RIL 1
+#define CONFIG_RIH 3
+#define CONFIG_RZERO 5
+#define CONFIG_CAPZERO 7
+#define CONFIG_REFOFFSET 8
+#define CONFIG_COMPOFFSET 9
+#define CONFIG_MAGIC 10
+#define ROM_MAGIC B10011010
 
 // Tester modes, offsets and values
 typedef struct {
@@ -273,45 +285,6 @@ Diode_Type Diodes[6];                     // Diodes (3 combinations in 2 directi
 BJT_Type BJT;                             // Bipolar junction transistor
 FET_Type FET;                             // FET
 Inductor_Type Inductor;                   // Inductor
-
-// Store String to Flash Functions
-class __FlashStringHelper;
-#define X(str) (strcpy_P(PRGBuffer, PSTR(str)), PRGBuffer)
-
-// Strings
-char Running_str[] = "Testing...";
-char Failed1_str[] = "No or O/C device";
-char Thyristor_str[] = "SCR";
-char Triac_str[] = "Triac";
-char GAK_str[] = "GAC=";
-char Remove_str[] = "Remove";
-char Create_str[] = "Create";
-char Short_str[] = "Short Circuit!";
-char DischFail_str[] = "Battery?";
-char MOS_str[] = "MOS";
-char FET_str[] = "FET";
-char Channel_str[] = "-ch";
-char Enhancement_str[] = "enh.";
-char Depletion_str[] = "dep.";
-char IGBT_str[] = "IGBT";
-char GateCap_str[] = "Cgs=";
-char GDS_str[] = "GDS=";
-char GCE_str[] = "GCE=";
-char Vth_str[] = "Vth=";
-char I_R_str[] = "I_R=";
-char URef_str[] = "Vref";
-char RhLow_str[] = "Rh-";
-char RhHigh_str[] = "Rh+";
-char RiLow_str[] = "Ri-";
-char RiHigh_str[] = "Ri+";
-char Rl_str[] = "+Rl-";
-char Rh_str[] = "+Rh-";
-char ProbeComb_str[] = "12 13 23";
-char CapOffset_str[] = "C0";
-char ROffset_str[] = "R0";
-char CompOffset_str[] = "AComp";
-char Splash_str[] = "   Nikol MCT-1601";
-char Version_str[] = "v0.1";
 
 byte sym_LOW1[8]   = { B00000000, B00000000, B00000000, B00010000,
                        B00010010, B00010101, B00010101, B00011010 };
@@ -615,15 +588,17 @@ void setup() {
   LoadAdjust();                           // Load adjustment values
 
 #ifdef DEBUG_PRINT
-  Serial.print(X("Nikol MCT-1601"));
+  Serial.print(F("Nikol MCT-1601"));
   Serial.println();
-  Serial.println(X("Based on Ardutester by PighiXXX & PaoloP"));
-  Serial.println(X("from original version by Markus Reschke"));
+  Serial.println(F("Based on Ardutester by PighiXXX & PaoloP"));
+  Serial.println(F("from original version by Markus Reschke"));
   Serial.println();
-  Serial.println(X("Press Button to Probe"));
-  Serial.println(X("Long press to adjust and save"));
+  Serial.println(F("Press Button to Probe"));
+  Serial.println(F("Long press to adjust and save"));
 #endif
 }
+
+byte gogohut = 0;
 
 // Main loop
 void loop() {
@@ -640,44 +615,47 @@ void loop() {
   BJT.I_CE0 = 0;
   // Reset hardware
   SetADCHiz();                            // Set all pins of ADC port as input
-  lcd_clear();
-  lcd.print(Splash_str);
-  lcd_setcursor(0, 2);
-  lcd.print("Press button to test");
-  lcd_setcursor(0, 3);
-  lcd.print("Hold 1s to calibrate");
-
+  if(!gogohut) {
+    lcd_clear();
+    lcd.print(F("   Nikol MCT-1601"));
+    lcd_setcursor(0, 1);
+    lcd.print(F("Press button to test"));
+    lcd_setcursor(0, 2);
+    lcd.print(F("Hold 1s cont. test"));
+    lcd_setcursor(0, 3);
+    lcd.print(F("Hold 5s to calibrate"));
+  }
+  
   // Internal bandgap reference
   Config.U_Bandgap = ReadU(0x0e);         // Dummy read for bandgap stabilization
   Config.Samples = 200;                   // Do a lot of samples for high accuracy
   Config.U_Bandgap = ReadU(0x0e);         // Get voltage of bandgap reference
   Config.Samples = ADC_SAMPLES;           // Set samples back to default
   Config.U_Bandgap += Config.RefOffset;   // Add voltage offset
+  digitalWrite(DISCHARGE_RELAY, HIGH);    // Turn off relay (discharge DUT)
   Test = TestKey();
   if(Test == 2) {                         // Long Press
     wdt_disable();                        // Disable watchdog
     AdjustAndSave();                      // Calibrate
   } else {
-    lcd_clear();
+    if(!gogohut) lcd_clear();
     if(AllProbesShorted() == 3) {         // All probes Shorted!
 #ifdef DEBUG_PRINT
         Serial.println();
 #endif
-        lcd.print(Remove_str);     // Display: Remove
+        lcd.print(F("Remove"));
         lcd_setcursor(0, 1);
-        lcd.print(Short_str);      // Display: short circuit!
+        lcd.print(F("Short Circuit"));
       } else {
-        lcd_setcursor(0, 1);              // Move to line #2
-        lcd.print("Discharging DUT...");
-        digitalWrite(DISCHARGE_RELAY, LOW);
-        delay(200);
-        digitalWrite(DISCHARGE_RELAY, HIGH);
+        if(!gogohut) lcd_setcursor(0, 1);              // Move to line #2
         // Display start of probing
-        lcd_setcursor(0, 2);              // Move to line #2
-        lcd.print(Running_str);    // Display: Testing...
+        digitalWrite(DISCHARGE_RELAY, LOW); // Turn on relay (connect DUT to tester)
+        if(!gogohut) lcd.print(F("Discharging DUT..."));
         DischargeProbes();
+        if(!gogohut) lcd_setcursor(0, 2);              // Move to line #2
+        if(!gogohut) lcd.print(F("Testing..."));    // Display: Testing...
         if(Check.Found == COMP_ERROR) {   // Discharge failed
-          lcd.print(DischFail_str);
+          lcd.print(F("Battery?"));
           // Display probe number and remaining voltage
           lcd_setcursor(0, 2);
           lcd_testpin(Check.Probe);
@@ -696,13 +674,15 @@ void loop() {
           if(Check.Found == COMP_NONE || Check.Found == COMP_RESISTOR) {
 #ifdef DEBUG_PRINT
             Serial.println();
-            Serial.println(X("Wait a moment..."));
+            Serial.println(F("Wait a moment..."));
 #endif
             // Tell user to be patient with large caps
-            lcd_clear_line(2);
-            lcd.print(Running_str);
-            lcd.write(' ');
-            lcd.write('C');
+            if(!gogohut)  {
+              lcd_clear_line(2);
+              lcd.print(F("Testing..."));
+              lcd.write(' ');
+              lcd.write('C');
+            }
             // Check all possible combinations
             MeasureCap(TP3, TP1, 0);
             MeasureCap(TP3, TP2, 1);
@@ -711,51 +691,51 @@ void loop() {
           lcd_clear();
           // Call output function based on component type
 #ifdef DEBUG_PRINT
-          Serial.print("Found: ");
+          Serial.print(F("Found: "));
           // Components ID's
           switch (Check.Found) {
             case COMP_ERROR:
-              Serial.println(X("Component Error!"));
+              Serial.println(F("Component Error!"));
               break;
 
             case COMP_NONE:
-              Serial.println(X("No Component!"));
+              Serial.println(F("No Component!"));
               break;
 
             case COMP_RESISTOR:
-              Serial.println(X("Resistor"));
+              Serial.println(F("Resistor"));
               break;
 
             case COMP_CAPACITOR:
-              Serial.println(X("Capacitor"));
+              Serial.println(F("Capacitor"));
               break;
 
             case COMP_INDUCTOR:
-              Serial.println(X("Inductor"));
+              Serial.println(F("Inductor"));
               break;
 
             case COMP_DIODE:
-              Serial.println(X("Diode"));
+              Serial.println(F("Diode"));
               break;
 
             case COMP_BJT:
-              Serial.println(X("BJT"));
+              Serial.println(F("BJT"));
               break;
 
             case COMP_FET:
-              Serial.println(X("FET"));
+              Serial.println(F("FET"));
               break;
 
             case COMP_IGBT:
-              Serial.println(X("IGBT"));
+              Serial.println(F("IGBT"));
               break;
 
             case COMP_TRIAC:
-              Serial.println(X("TRIAC"));
+              Serial.println(F("TRIAC"));
               break;
 
             case COMP_THYRISTOR:
-              Serial.println(X("Thyristor"));
+              Serial.println(F("Thyristor"));
               break;
           }
 #endif
@@ -1180,6 +1160,22 @@ unsigned int ReadU(byte Probe)
   unsigned int U;                         // Return value (mV)
   byte lc;                                // Loop counter
   unsigned long int Value;                // ADC value
+
+  for(lc = 0, Value = 0; lc < Config.Samples; lc++) {
+    Value += DoReadU(Probe);                      // Add ADC reading
+  }
+  // De-sample to get average voltage
+  Value /= Config.Samples;
+  U = Value;
+  return U;
+}
+
+// Read ADC and return voltage in mV
+unsigned int DoReadU(byte Probe)
+{
+  unsigned int U;                         // Return value (mV)
+  byte lc;                                // Loop counter
+  unsigned long int Value;                // ADC value
   Probe |= (1 << REFS0);                  // Use internal reference anyway
   char i;
   byte saveRef;
@@ -1199,17 +1195,14 @@ unsigned int ReadU(byte Probe)
     }
     // Sample ADC readings
     Value = 0;                            // Reset sampling variable
-
-    for(lc = 0; lc < Config.Samples; lc++) {
-      ADCSRA |= (1 << ADSC);              // Start conversion
-      while (ADCSRA & (1 << ADSC));       // Wait until conversion is done
-      Value += ADCW;                      // Add ADC reading
-      // Auto-switch voltage reference for low readings
-      if(lc == 4 && Value < 1024 && !(Probe & (1 << REFS1)) && Config.AutoScale == 1) {
-        Probe |= (1 << REFS1);            // Select internal bandgap reference
-        i = -1;                           // Re-run sampling
-        break;
-      }
+    ADCSRA |= (1 << ADSC);              // Start conversion
+    while (ADCSRA & (1 << ADSC));       // Wait until conversion is done
+    Value += ADCW;                      // Add ADC reading
+    // Auto-switch voltage reference for low readings
+    if(lc == 4 && Value < 1024 && !(Probe & (1 << REFS1)) && Config.AutoScale == 1) {
+      Probe |= (1 << REFS1);            // Select internal bandgap reference
+      i = -1;                           // Re-run sampling
+      break;
     }
   }
   // Convert ADC reading to voltage - single sample: U = ADC reading * U_ref / 1024
@@ -1219,8 +1212,6 @@ unsigned int ReadU(byte Probe)
   // Convert to voltage
   Value *= U;                             // ADC readings * U_ref
   Value /= 1024;                          // / 1024 for 10bit ADC
-  // De-sample to get average voltage
-  Value /= Config.Samples;
   U = Value;
   return U;
 }
@@ -3070,21 +3061,25 @@ void DisplaySignedValue(signed long Value, signed char Exponent, unsigned char U
 void ShortCircuit(byte Mode) {
   byte Run = 0;                           // Loop control
   byte Test;                              // Test feedback
-  char *String = NULL;           // Display string pointer
+  byte d = 0;
   Test = AllProbesShorted();              // Get current status
   if(Mode == 0) {                         // Remove short
     // Some shorted
-    if(Test != 0) String = (unsigned char *)Remove_str;
+    if(Test != 0) d = 1;
   } else {                                // Create short
     // Some unshorted
-    if(Test != 3) String = (unsigned char *)Create_str;
+    if(Test != 3) d = 1;
   }
   // If required tell user what to do
-  if(String) {
+  if(d) {
     lcd_clear();
-    lcd.print(String);                    // Display: Remove/Create
+    if(Mode == 0) {                       // Remove short
+      lcd.print(F("Remove"));
+    } else {                              // Create short
+      lcd.print(F("Create"));
+    }
     lcd_setcursor(0, 2);
-    lcd.print(Short_str);                 // Display: short circuit!
+    lcd.print(F("Short Circuit"));        // Display: short circuit!
     Run = 1;                              // Enter loop
   }
   // Wait until all probes are dis/connected
@@ -3106,36 +3101,40 @@ void ShortCircuit(byte Mode) {
 byte TestKey() {
   byte i;
 
+  if(gogohut) {
+    if(digitalRead(TEST_BUTTON) == LOW) {
+      lcd_clear();
+      lcd.print(F("Leaving continuous"));
+      while(digitalRead(TEST_BUTTON) == LOW);
+      delay(1000);
+      gogohut = 0;
+      return 0;
+    }
+    return 1;
+  }
   for(;;) {
     i = Test.timeup();
     if(!i) {
       delay(10);
       continue;
     }
-    if(i >= LONG_PRESS) return 2;
-    else return 1;
+    if(i >= LONG_LONG_PRESS) return 2;
+    else if(i >= LONG_PRESS) gogohut = 1;
+    return 1;
   }
 }
 
 // Show failed test
 void ShowFail(void) {
   // Display info
-  lcd.print(Failed1_str);                 // Display: No component
-
-  // Display numbers of diodes found
-  if(Check.Diodes > 0)                    // Diodes found
-  {
-    lcd.write(' ');                       // Display space
-    lcd.write(Check.Diodes + '0');        // Display number of diodes found
- //   lcd.print(Diode_AC_str);            //Display: -|>|-
-  }
+  lcd.print(F("No or O/C device"));                 // Display: No component
 }
 
 // Show Error                             //Only for Standalone Version!
 void ShowError() {
   if(Check.Type == TYPE_DISCHARGE)        // Discharge failed
   {
-    lcd.print(DischFail_str);             // Display: Battery?
+    lcd.print("Battery?");             // Display: Battery?
 
     // Display probe number and remaining voltage
     lcd_setcursor(0, 2);
@@ -3195,7 +3194,7 @@ void ShowDiode(void) {
   lcd_createChar(0, sym_V);
   lcd_createChar(1, sym_I);
   lcd_clear();
-  lcd.print("Diode");
+  lcd.print(F("Diode"));
   lcd_setcursor(19, 0);
   lcd_testpin(D1->A);                     // Display pin #1
   lcd_setcursor(19, 1);
@@ -3215,7 +3214,7 @@ void ShowDiode(void) {
   // Uf
   lcd.write((byte) 0);
   lcd.write((byte) 7);
-  lcd.print(" = ");
+  lcd.print(F(" = "));
   ShowDiode_Uf(D1);                       // First diode
   lcd_setcursor(0, 2);
   // Display low current Uf
@@ -3223,7 +3222,7 @@ void ShowDiode(void) {
   lcd.write((byte) 7);
   lcd.write((byte) 2);
   lcd.write((byte) 3);
-  lcd.print(" = ");
+  lcd.print(F(" = "));
   DisplayValue(D1->V_f2, -3, 'V');
 
   // Reverse leakage current
@@ -3232,12 +3231,12 @@ void ShowDiode(void) {
   lcd_setcursor(0, 3);
   lcd.write((byte) 1);
   lcd.write((byte) 4);
-  lcd.print(" = ");
+  lcd.print(F(" = "));
   DisplayValue(I_leak, -6, 'A');          // Display current
 
   // Capacitance
   lcd.write(' ');
-  lcd.print("C = ");
+  lcd.print(F("C = "));
   ShowDiode_C(D1);                        // First diode
 }
 
@@ -3252,15 +3251,20 @@ void ShowBJT(void) {
   long int V_BE;                          // V_BE
   signed int Slope;                       // Slope of forward voltage
 
+  wdt_disable();                          // Disable watchdog
   // Display type
+  if(Check.Type == TYPE_NPN) lcd_createChar(2, sym_NPN);
+  else lcd_createChar(2, sym_PNP);
+  lcd_clear();
+  lcd_home();
   if(Check.Type == TYPE_NPN) {            // NPN
     e = 3;
     c = 1;
-    String = "Trans. Bipolar   NPN";
+    lcd.print(F("Trans. Bipolar   NPN"));
   } else {                                // PNP
     e = 1;
     c = 3;
-    String = "Trans. Bipolar   PNP";
+    lcd.print(F("Trans. Bipolar   PNP"));
   }
   lcd_createChar(7, sym_FE);
   lcd_createChar(5, sym_BE1);
@@ -3271,10 +3275,6 @@ void ShowBJT(void) {
   lcd_createChar(1, sym_V);
   if(Check.Type == TYPE_NPN) lcd_createChar(2, sym_NPN);
   else lcd_createChar(2, sym_PNP);
-  lcd_clear();
-  lcd_home();
-  lcd.print(String);                      // Display: NPN / PNP
-  wdt_disable();                          // Disable watchdog
   lcd_setcursor(19, e);
   lcd_testpin(BJT.E);                     // Display emitter pin
   lcd_setcursor(14, 2);
@@ -3287,7 +3287,7 @@ void ShowBJT(void) {
   lcd_setcursor(0, 1);                    // Move to line #1
   lcd.write((byte) 0);
   lcd.write((byte) 7);
-  lcd.print("  = ");
+  lcd.print(F("  = "));
   DisplayValue(BJT.hFE, 0, 0);
   // Display V_BE (taken from diode forward voltage)
   Diode = &Diodes[0];                     // Get pointer of first diode
@@ -3309,7 +3309,7 @@ void ShowBJT(void) {
   lcd.write(1);
   lcd.write((byte) 5);
   lcd.write((byte) 6);
-  lcd.print(" = ");
+  lcd.print(F(" = "));
 
 //       Vf is quite linear for a logarithmicly scaled I_b.
 //       So we may interpolate the Vf values of low and high test current
@@ -3350,7 +3350,7 @@ void ShowBJT(void) {
       lcd.write('I');
       lcd.write((byte) 3);
       lcd.write((byte) 4);
-      lcd.print(" = ");                   // Display: I_CE0=
+      lcd.print(F(" = "));                   // Display: I_CE0=
       DisplayValue(BJT.I_CE0, -6, 'A');   // Display current
       Counter = Check.Diodes;             // End loop
     } else {
@@ -3364,18 +3364,19 @@ void ShowBJT(void) {
 // Show MOSFET/IGBT extras
 void Show_FET_IGBT_Extras(byte Symbol) {
   // Instrinsic diode
+  lcd_clear();
   if(Check.Diodes > 0) {
     lcd.write(' ');                       // Display space
     lcd.write(Symbol);                    // Display diode symbol
   }
-  TestKey();                              // Next page
-  lcd_clear();
+
   // Gate threshold voltage
-  lcd.print(Vth_str);                     // Display: Vth
+  lcd_setcursor(0, 1);
+  lcd.print(F("Vth = "));
   DisplayValue(FET.V_th, -3, 'V');        // Display V_th in mV
   lcd_setcursor(0, 2);
   // Display gate capacitance
-  lcd.print(GateCap_str);                 // Display: Cgs=
+  lcd.print(F("Cgs = "));                 // Display: Cgs=
   MeasureCap(FET.G, FET.S, 0);            // Measure capacitance
   // Display value and unit
   DisplayValue(Caps[0].Value, Caps[0].Scale, 'F');
@@ -3393,12 +3394,12 @@ void ShowFET(void) {
     Data = 'P';
   // Display type
   if(Check.Type & TYPE_MOSFET) {          // MOSFET
-    lcd.print(MOS_str);                   // Display: MOS
-    lcd.print(FET_str);                   // Display: FET
+    lcd.print(F("MOS"));
+    lcd.print(F("FET"));
   // Display channel type
-    lcd.write(' ');
+    lcd_setcursor(0, 1);
     lcd.write(Data);                      // Display: N / P
-    lcd.print(Channel_str);               // Display: -ch
+    lcd.print(F("-channel"));
   } else  {                               // JFET sym_JFET
     if(Data == 'P')
       lcd_createChar(4, sym_PFETG);
@@ -3415,37 +3416,37 @@ void ShowFET(void) {
     // Display pins
     lcd_setcursor(17, 1);
     lcd.write(6);
-    lcd.print(" ?");
+    lcd.print(F(" ?"));
     lcd_setcursor(14, 2);
     lcd_testpin(FET.G);                   // Display gate pin
     lcd_setcursor(17, 3);
     lcd.write(7);
-    lcd.print(" ?");
+    lcd.print(F(" ?"));
     lcd_setcursor(0, 0);
-    lcd.print("Tran. JFET ");
+    lcd.print(F("Tran. JFET "));
     lcd.write(Data);
-    lcd.print("-channel");
+    lcd.print(F("-channel"));
     lcd_setcursor(0, 1);
-    lcd.print("Cannot");
+    lcd.print(F("Cannot"));
     lcd_setcursor(0, 2);
-    lcd.print("identify S/D");
+    lcd.print(F("identify S/D"));
     lcd_setcursor(0, 3);
-    lcd.print("for a JFET");
+    lcd.print(F("for a JFET"));
     lcd_setcursor(2, 3);
-    lcd.print("r");
+    lcd.print(F("r"));
     return;
   }
   // Display mode
   if(Check.Type & TYPE_MOSFET) {          // MOSFET
-    lcd.write(' ');
+    lcd_setcursor(0, 1);
     if(Check.Type & TYPE_ENHANCEMENT)     // Enhancement mode
-      lcd.print(Enhancement_str);
+      lcd.print(F("Enhancement"));
     else                                  // Depletion mode
-      lcd.print(Depletion_str);
+      lcd.print(F("Depletion"));
   }
   // Pins
   lcd_setcursor(0, 2);                    // Move to line #2
-  lcd.print(GDS_str);                     // Display: GDS=
+  lcd.print(F("GDS = "));
   lcd_testpin(FET.G);                     // Display gate pin
   lcd_testpin(FET.D);                     // Display drain pin
   lcd_testpin(FET.S);                     // Display source pin
@@ -3466,20 +3467,20 @@ void ShowIGBT(void) {
     Data = 'N';
   else                                    // p-channel
     Data = 'P';
-  lcd.print(IGBT_str);                    // Display: IGBT
+  lcd.print(F("IGBT"));                    // Display: IGBT
   // Display channel type
   lcd.write(' ');
   lcd.write(Data);                        // Display: N / P
-  lcd.print(Channel_str);                 // Display: -ch
+  lcd.print(F("-channel"));
   // Display mode
-  lcd.write(' ');
-  if(Check.Type & TYPE_ENHANCEMENT)       // Enhancement mode
-    lcd.print(Enhancement_str);
-  else                                    // Depletion mode
-    lcd.print(Depletion_str);
+  lcd_setcursor(0, 1);
+  if(Check.Type & TYPE_ENHANCEMENT)     // Enhancement mode
+    lcd.print(F("Enhancement"));
+  else                                  // Depletion mode
+    lcd.print(F("Depletion"));
   // Pins
   lcd_setcursor(0, 2);                    // Move to line #2
-  lcd.print(GCE_str);                     // Display: GCE=
+  lcd.print(F("GCE = "));
   lcd_testpin(FET.G);                     // Display gate pin
   lcd_testpin(FET.D);                     // Display collector pin
   lcd_testpin(FET.S);                     // Display emitter pin
@@ -3491,13 +3492,13 @@ void ShowIGBT(void) {
 void ShowSpecial(void) {
   // Display component type
   if(Check.Found == COMP_THYRISTOR) {
-    lcd.print(Thyristor_str);             // Display: thyristor
+    lcd.print(F("Thyristor"));
   } else if(Check.Found == COMP_TRIAC) {
-    lcd.print(Triac_str);                 // Display: triac
+    lcd.print(F("Triac"));                 // Display: triac
   }
   // Display pins
   lcd_setcursor(0, 2);                    // Move to line #2
-  lcd.print(GAK_str);                     // Display: GAK
+  lcd.print(F("GAC = "));                     // Display: GAK
   lcd_testpin(BJT.B);                     // Display gate pin
   lcd_testpin(BJT.C);                     // Display anode pin
   lcd_testpin(BJT.E);                     // Display cathode pin
@@ -3517,7 +3518,7 @@ void ShowResistor(void) {
     lcd_createChar(5, sym_IND1);
     lcd_createChar(6, sym_IND2);
     lcd_clear();
-    lcd.print("Inductor");
+    lcd.print(F("Inductor"));
     lcd_setcursor(19, 0);
     lcd_testpin(R1->A);
     lcd_setcursor(19, 1);
@@ -3527,15 +3528,15 @@ void ShowResistor(void) {
     lcd_setcursor(19, 3);
     lcd_testpin(R1->B);
     lcd_setcursor(0, 1);                  // Move to line #2
-    lcd.print("Value: ");
+    lcd.print(F("Value: "));
     DisplayValue(Inductor.Value, Inductor.Scale, 'H');
     lcd_setcursor(0, 2);                  // Move to line #2
-    lcd.print("Res.: ");
+    lcd.print(F("Res.: "));
       DisplayValue(R1->Value, R1->Scale, LCD_CHAR_OMEGA);
   } else {
   // Display the pins, first resistor
     lcd_clear();
-    lcd.print("Resistor");
+    lcd.print(F("Resistor"));
     lcd_setcursor(2, 0);
     lcd.write('s');
     lcd_setcursor(19, 0);
@@ -3547,7 +3548,7 @@ void ShowResistor(void) {
     lcd_setcursor(19, 3);
     lcd_testpin(R1->B);
     lcd_setcursor(0, 1);                  // Move to line #2
-    lcd.print("Value: ");
+    lcd.print(F("Value: "));
     DisplayValue(R1->Value, R1->Scale, LCD_CHAR_OMEGA);
   }
 }
@@ -3576,7 +3577,7 @@ void ShowCapacitor(void) {
   lcd_createChar(5, sym_CAP1);
   lcd_createChar(6, sym_CAP2);
   lcd_clear();
-  lcd.print("Capacitor");
+  lcd.print(F("Capacitor"));
   lcd_setcursor(19, 0);
   lcd_testpin(MaxCap->A);                 // Display pin #1
   lcd_setcursor(19, 1);
@@ -3586,7 +3587,7 @@ void ShowCapacitor(void) {
   lcd_setcursor(19, 3);
   lcd_testpin(MaxCap->B);                 // Display pin #2
   lcd_setcursor(0, 1);                    // Move to line #2
-  lcd.print("Value: ");
+  lcd.print(F("Value: "));
   // And show capacitance
   // Serial.println(MaxCap->Scale);
   DisplayValue(MaxCap->Value, MaxCap->Scale, 'F');
@@ -3594,8 +3595,7 @@ void ShowCapacitor(void) {
 
 // Load adjustment values
 void LoadAdjust(void) {
-  if(EEPROM.read(10)==126) {
-    // Read from EEPROM
+  if(EEPROM.read(CONFIG_MAGIC) == ROM_MAGIC) {
     ReadEEP();
   } else {
     // Default Values
@@ -3605,7 +3605,6 @@ void LoadAdjust(void) {
     Config.CapZero = C_ZERO;
     Config.RefOffset = UREF_OFFSET;
     Config.CompOffset = COMPARATOR_OFFSET;
-    // Save to EEProm
     SaveEEP();
   }
 }
@@ -3637,16 +3636,16 @@ byte SelfTest(void) {
         case 1:                           // Reference voltage
           Val0 = ReadU(0x0e);             // Dummy read for bandgap stabilization
           Val0 = ReadU(0x0e);             // Read bandgap reference voltage
-          lcd.print(URef_str);            // Display: Vref
+          lcd.print(F("Vref"));
           lcd_setcursor(0, 2);
           DisplayValue(Val0, -3, 'V');    // Display voltage in mV
           DisplayFlag = 0;                // Reset flag
           break;
 
         case 2:                           // Compare Rl resistors (probes still shorted)
-          lcd.print(Rl_str);              // Display: +Rl-
+          lcd.print(F("+Rl-"));
           lcd.write(' ');
-          lcd.print(ProbeComb_str);       // Display: 12 13 23
+          lcd.print(F("12 13 23"));
           // Set up a voltage divider with the Rl's, substract theoretical voltage of voltage divider
           // TP1: Gnd -- Rl -- probe-2 -- probe-1 -- Rl -- Vcc
           R_PORT = 1 << (TP1 * 2);
@@ -3665,9 +3664,9 @@ byte SelfTest(void) {
           break;
 
         case 3:                           // Compare Rh resistors (probes still shorted)
-          lcd.print(Rh_str);              // Display: +Rh-
+          lcd.print(F("+Rh-"));
           lcd.write(' ');
-          lcd.print(ProbeComb_str);       // Display: 12 13 23
+          lcd.print(F("12 13 23"));
           // Set up a voltage divider with the Rh's
           // TP1: Gnd -- Rh -- probe-2 -- probe-1 -- Rh -- Vcc
           R_PORT = 2 << (TP1 * 2);
@@ -3692,7 +3691,7 @@ byte SelfTest(void) {
           break;
 
         case 5:                           // Rh resistors pulled down
-          lcd.print(RhLow_str);           // Display: Rh-
+          lcd.print(F("Rh-"));
           // TP1: Gnd -- Rh -- probe
           R_PORT = 0;
           R_DDR = 2 << (TP1 * 2);
@@ -3706,7 +3705,7 @@ byte SelfTest(void) {
           break;
 
         case 6:                           // Rh resistors pulled up
-          lcd.print(RhHigh_str);          // Display: Rh+
+          lcd.print(F("Rh+"));
           // TP1: probe -- Rh -- Vcc
           R_DDR = 2 << (TP1 * 2);
           R_PORT = 2 << (TP1 * 2);
@@ -3788,9 +3787,9 @@ byte SelfAdjust(void) {
       // Tests
       switch (Test) {
         case 1:                           // Resistance of probe leads (probes shorted)
-          lcd.print(ROffset_str);         // Display: R0
+          lcd.print(F("R0"));
           lcd.write(' ');
-          lcd.print(ProbeComb_str);       // Display: 12 13 23
+          lcd.print(F("12 13 23"));
            // The resistance is for two probes in series and we expect it to be
            // smaller than 1.00 Ohms, i.e. 0.50 Ohms for a single probe
           UpdateProbes(TP2, TP1, 0);
@@ -3820,7 +3819,7 @@ byte SelfAdjust(void) {
           break;
 
         case 3:                           // Internal resistance of µC in pull-down mode
-          lcd.print(RiLow_str);           // Display: Ri-
+          lcd.print(F("Ri-"));
 
           // TP1:  Gnd -- Ri -- probe -- Rl -- Ri -- Vcc
           SetADCLow();
@@ -3847,7 +3846,7 @@ byte SelfAdjust(void) {
           break;
 
         case 4:                           // Internal resistance of µC in pull-up mode
-          lcd.print(RiHigh_str);          // Display: Ri+
+          lcd.print(F("Ri+"));
 
           // TP1: Gnd -- Ri -- Rl -- probe -- Ri -- Vcc
           R_PORT = 0;
@@ -3874,9 +3873,9 @@ byte SelfAdjust(void) {
           break;
 
         case 5:                           // Capacitance offset (PCB and probe leads)
-          lcd.print(CapOffset_str);       // Display: C0
+          lcd.print(F("C0"));
           lcd.write(' ');
-          lcd.print(ProbeComb_str);       // Display: 12 13 23
+          lcd.print(F("12 13 23"));
 
           // The capacitance is for two probes and we expect it to be less than 100pF.
           MeasureCap(TP2, TP1, 0);
@@ -3993,37 +3992,37 @@ byte SelfAdjust(void) {
 void ShowAdjust(void) {
   // Display RiL and RiH
   lcd_clear();
-  lcd.print(RiLow_str);                   // Display: Ri-
+  lcd.print(F("Ri-"));
   lcd.write(' ');
   DisplayValue(Config.RiL, -1, LCD_CHAR_OMEGA);
   lcd_setcursor(0, 2);
-  lcd.print(RiHigh_str);                  // Display: Ri+
+  lcd.print(F("Ri+"));
   lcd.write(' ');
   DisplayValue(Config.RiH, -1, LCD_CHAR_OMEGA);
   TestKey();                              // Let the user read
 
   // Display C-Zero
   lcd_clear();
-  lcd.print(CapOffset_str);               // Display: C0
+  lcd.print(F("C0"));
   lcd.write(' ');
   DisplayValue(Config.CapZero, -12, 'F'); // Display C0 offset
 
   // Display R-Zero
   lcd_setcursor(0, 2);
-  lcd.print(ROffset_str);                 // Display: R0
+  lcd.print(F("R0"));
   lcd.write(' ');
-  DisplayValue(Config.RZero, -2, LCD_CHAR_OMEGA);// Display R0
+  DisplayValue(Config.RZero, -2, LCD_CHAR_OMEGA); // Display R0
   TestKey();                              // Let the user read
 
   // Display offset of bandgap reference
   lcd_clear();
-  lcd.print(URef_str);                    // Display: Vref
+  lcd.print(F("Vref"));
   lcd.write(' ');
   DisplaySignedValue(Config.RefOffset, -3, 'V');
 
   // Display offset of analog comparator
   lcd_setcursor(0, 2);
-  lcd.print(CompOffset_str);              // Display: AComp
+  lcd.print(F("AComp"));
   lcd.write(' ');
   DisplaySignedValue(Config.CompOffset, -3, 'V');
   TestKey();                              // Let the user read
@@ -4032,79 +4031,56 @@ void ShowAdjust(void) {
 // Update values stored in EEPROM
 void SaveEEP(void) {
   // Ri of µC in low mode
-  EEPROMWriteInt(1, Config.RiL);
+  EEPROM.updateInt(CONFIG_RIL, Config.RiL);
   // Ri of µC in low mode
-  EEPROMWriteInt(3, Config.RiH);
+  EEPROM.updateInt(CONFIG_RIL, Config.RiH);
   // Resistance of probe leads
-  EEPROMWriteInt(5, Config.RZero);
+  EEPROM.updateInt(CONFIG_RZERO, Config.RZero);
   // Capacitance offset: PCB + wiring + probe leads
-  EEPROM.write(7, Config.CapZero);
-  delay(10);
+  EEPROM.update(CONFIG_RZERO, Config.CapZero);
   // Voltage offset of bandgap reference
-  EEPROM.write(8, Config.RefOffset);
-  delay(10);
+  EEPROM.update(CONFIG_REFOFFSET, Config.RefOffset);
   // Voltage offset of analog comparator
-  EEPROM.write(9, Config.CompOffset);
-  delay(10);
-  EEPROM.write(10, 126);
-  delay(10);
+  EEPROM.update(CONFIG_COMPOFFSET, Config.CompOffset);
+  EEPROM.update(CONFIG_MAGIC, ROM_MAGIC);
 }
 
 // Read values stored in EEPROM
 void ReadEEP(void) {
-  Config.RiL = EEPROMReadInt(1);
-  Config.RiH = EEPROMReadInt(3);
-  Config.RZero = EEPROMReadInt(5);
-  Config.CapZero = EEPROM.read(7);
-  Config.RefOffset = EEPROM.read(8);
-  Config.CompOffset = EEPROM.read(9);
-}
-
-// Read a 2 byte integer from the eeprom
-unsigned int EEPROMReadInt(int p_address) {
-  byte lowByte = EEPROM.read(p_address);
-  byte highByte = EEPROM.read(p_address + 1);
-
-  return ((lowByte << 0) & 0xFF) + ((highByte << 8) & 0xFF00);
-}
-
-// Write a 2 byte integer to the eeprom
-void EEPROMWriteInt(int p_address, int p_value) {
-  byte lowByte = ((p_value >> 0) & 0xFF);
-  byte highByte = ((p_value >> 8) & 0xFF);
-
-  EEPROM.write(p_address, lowByte);
-  delay(10);
-  EEPROM.write(p_address + 1, highByte);
-  delay(10);
+  Config.RiL = EEPROM.readInt(CONFIG_RIL);
+  Config.RiH = EEPROM.readInt(CONFIG_RIH);
+  Config.RZero = EEPROM.readInt(CONFIG_RZERO);
+  Config.CapZero = EEPROM.read(CONFIG_CAPZERO);
+  Config.RefOffset = EEPROM.read(CONFIG_REFOFFSET);
+  Config.CompOffset = EEPROM.read(CONFIG_COMPOFFSET);
 }
 
 void AdjustAndSave(void) {
   lcd_clear();
-  lcd.print("Adjust");
+  lcd.print(F("Adjust"));
   lcd_setcursor(0, 1);
-  lcd.print(" - press button");
+  lcd.print(F(" - press button"));
   TestKey();
   lcd_setcursor(0, 2);
-  lcd.print("Adjusting...");
+  lcd.print(F("Adjusting..."));
   SelfAdjust();
   lcd_setcursor(0, 1);
-  lcd.print(" - press button");
+  lcd.print(F(" - press button"));
   TestKey();
   lcd_clear();
-  lcd.print("Adjust Done");
+  lcd.print(F("Adjust Done"));
   lcd_setcursor(0, 1);
-  lcd.print(" - press button");
+  lcd.print(F(" - press button"));
   TestKey();
   lcd_clear();
-  lcd.print("Save");
+  lcd.print(F("Save"));
   lcd_setcursor(0, 1);
-  lcd.print(" - press button");
+  lcd.print(F(" - press button"));
   SaveEEP();
   lcd_clear();
-  lcd.print("Done");
+  lcd.print(F("Done"));
   lcd_setcursor(0, 1);
-  lcd.print(" - press button");
+  lcd.print(F(" - press button"));
   TestKey();
   return;
 }
