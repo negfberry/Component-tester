@@ -2733,7 +2733,7 @@ void MeasureCap(byte Probe1, byte Probe2, byte ID) {
       // Report capacitor for large C (> 4.3µF)
       if(Cap->Scale >= -6) Check.Found = COMP_CAPACITOR;
     // We consider values below 5pF being just ghosts
-    } else { if((Cap->Scale > -12) || (Cap->Value >= 5UL)) {
+    } else if((Cap->Scale > -12) || (Cap->Value >= 5UL)) {
       Check.Found = COMP_CAPACITOR;       // Report capacitor
     }
   }
@@ -2988,12 +2988,11 @@ void lcd_clear_line(unsigned char l) {
 
   lcd_setcursor(0, l);
   for (c = 0; c < 20; c++) lcd.write(' ');
-  lcd_setcursor(0, Line);
+  lcd_setcursor(0, l);
 }
 
 // Write probe pin number to the LCD
-void lcd_testpin(unsigned char Probe)
-{
+void lcd_testpin(unsigned char Probe) {
   // Since TP1 is 0 we simply add the value to '1'
   lcd.write('1' + Probe);                 // Send data
 }
@@ -3071,7 +3070,7 @@ void DisplaySignedValue(signed long Value, signed char Exponent, unsigned char U
 void ShortCircuit(byte Mode) {
   byte Run = 0;                           // Loop control
   byte Test;                              // Test feedback
-  unsigned char *String = NULL;           // Display string pointer
+  char *String = NULL;           // Display string pointer
   Test = AllProbesShorted();              // Get current status
   if(Mode == 0) {                         // Remove short
     // Some shorted
@@ -3761,7 +3760,7 @@ byte SelfAdjust(void) {
   byte DisplayFlag;                       // Display flag
 
   // Voltages
-  unsigned intVal1 = 0, Val2 = 0, Val3 = 0;
+  unsigned int Val1 = 0, Val2 = 0, Val3 = 0;
   byte CapCounter = 0;                    // Number of C_Zero measurements
   unsigned int CapSum = 0;                // Sum of C_Zero values
   byte RCounter = 0;                      // Number of R_Zero measurements
