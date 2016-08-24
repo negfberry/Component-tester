@@ -15,9 +15,9 @@ DIODES
 
 BJTS (Bipolar Junction Transistors):
 
-  Regular
+    Regular
   
-  Darlington pair
+    Darlington pair
   
 FETS:
 
