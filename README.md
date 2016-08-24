@@ -31,7 +31,7 @@ FETS:
     
 IGBTS (Insulated Gate Bipolar Transistor)
 
-COMP_TRIACS
+TRIACS
 
 THYRISTORS
 
