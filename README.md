@@ -6,19 +6,33 @@ Test many types of semiconductors, resistors, capacitors, inductors, etc.
 Full list:
 
 RESISTORS
+
 CAPACITORS
+
 INDUCTORS
+
 DIODES
+
 BJTS (Bipolar Junction Transistors):
+
   Regular
+  
   Darlington pair
+  
 FETS:
+
   JFET
+  
   MOSFET:
+  
     enhancement mode
+    
     depletion mode
+    
 IGBTS (Insulated Gate Bipolar Transistor)
+
 COMP_TRIACS
+
 THYRISTORS
 
 
