@@ -21,13 +21,13 @@ BJTS (Bipolar Junction Transistors):
   
 FETS:
 
-  JFET
+    JFET
   
-  MOSFET:
+    MOSFET:
   
-    enhancement mode
+        enhancement mode
     
-    depletion mode
+        depletion mode
     
 IGBTS (Insulated Gate Bipolar Transistor)
 
