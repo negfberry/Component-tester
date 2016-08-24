@@ -19,13 +19,18 @@
  *
  * Ardutester version:          PighiXXX (info@pighixxx.com)
  *
- * This version:                Nik Berry (nikberry@gmail.com
- * Source/Hardware:             https:// github.com/negfberry/Component-tester/
+ * This version:                Nik Berry (nikberry@gmail.com)
+ * Source/Hardware:             https://github.com/negfberry/Component-tester/
  */
+
+ #define VERSION "0.1"
+ #define EC 8
  
-// #define DEBUG_PRINT                       //@Print on Serial Port
-#define LONG_PRESS 10                     // Button Long Press
-#define LONG_LONG_PRESS 50                     // Button Long Long Press
+// #define DEBUG_PRINT                       // Print on Serial Port
+
+// Button press times in deciseconds (from ButtonCtl library)
+#define SEC1_PRESS 10                     // Button Long Press
+#define SEC5_PRESS 50                     // Button Unsigned Long Long Press (that's a joke)
 
 // UINT32_MAX
 #define UINT32_MAX  ((uint32_t)-1)
@@ -44,26 +49,26 @@
 #define TXPIN 2                           // LCD serial transmit
 
 // ADC voltage reference based on Vcc (in mV).
-#define UREF_VCC 5001
+#define VREF_VCC 5001
 
 //  Offset for the internal bandgap voltage reference (in mV): -100 up to 100
 //   - To compensate any difference between real value and measured value.
 //   - The ADC has a resolution of about 4.88mV for V_ref = 5V (Vcc) and
 //     1.07mV for V_ref = 1.1V (bandgap).
 //   - Will be added to measured voltage of bandgap reference.
-#define UREF_OFFSET 0
+#define VREF_OFFSET 0
 
 //   Exact values of probe resistors.
-//    - Standard value for Rl is 680 Ohms.
-//    - Standard value for Rh is 470k Ohms.
+//    - Standard value for rLow is 680 Ohms.
+//    - Standard value for rHigh is 470k Ohms.
 
-// Rl in Ohms
+// rLow in Ohms
 #define R_LOW 680
 
-// Rh in Ohms
+// rHigh in Ohms
 #define R_HIGH 470000
 
-// Offset for systematic error of resistor measurement with Rh (470k) in Ohms.
+// Offset for systematic error of resistor measurement with rHigh (470k) in Ohms.
 #define RH_OFFSET 700
 
 //   Resistance of probe leads (in 0.01 Ohms).
@@ -92,7 +97,7 @@
    Number of ADC samples to perform for each mesurement.
     - Valid values are in the range of 1 - 255.
 */
-#define ADC_SAMPLES 10
+#define ADC_SAMPLES 50
 
 // Estimated internal resistance of port to GND (in 0.1 Ohms)
 #define R_MCU_LOW 200                     // Default: 209
@@ -117,7 +122,6 @@
 // Component ID's
 #define COMP_NONE 0
 #define COMP_ERROR 1
-#define COMP_MENU 2
 #define COMP_RESISTOR 10
 #define COMP_CAPACITOR 11
 #define COMP_INDUCTOR 12
@@ -159,249 +163,266 @@
 #define TABLE_LARGE_CAP 2
 #define TABLE_INDUCTOR 3
 
-// Bit flags for PullProbe()
+// Bit flags for pullProbe()
 #define FLAG_PULLDOWN B00000000
 #define FLAG_PULLUP   B00000001
 #define FLAG_1MS      B00001000
 #define FLAG_10MS     B00010000
 
 // EEPROM addresses
-#define CONFIG_RIL 1
-#define CONFIG_RIH 3
-#define CONFIG_RZERO 5
-#define CONFIG_CAPZERO 7
-#define CONFIG_REFOFFSET 8
-#define CONFIG_COMPOFFSET 9
-#define CONFIG_MAGIC 10
+#define PARAM_RIL 1
+#define PARAM_RIH 3
+#define PARAM_RZERO 5
+#define PARAM_CAPZERO 7
+#define PARAM_REFOFFSET 8
+#define PARAM_COMPOFFSET 9
+#define PARAM_MAGIC 10
 #define ROM_MAGIC B10011010
 
 // Tester modes, offsets and values
 typedef struct {
-  byte SleepMode;                         // MCU sleep mode
-  byte Samples;                           // Number of ADC samples
-  byte AutoScale;                         // Flag to disable/enable ADC auto scaling
-  byte RefFlag;                           // Internal control flag for ADC
-  unsigned int U_Bandgap;                 // Voltage of internal bandgap reference (mV)
-  unsigned int RiL;                       // Internal pin resistance of µC in low mode (0.1 Ohms)
-  unsigned int RiH;                       // Internal pin resistance of µC in high mode (0.1 Ohms)
-  unsigned int RZero;                     // Resistance of probe leads (2 in series) (0.01 Ohms)
-  byte CapZero;                           // Capacity zero offset (input + leads) (pF)
-  signed char RefOffset;                  // Voltage offset of bandgap reference (mV)
-  signed char CompOffset;                 // Voltage offset of analog comparator (mV)
-} Config_Type;
+  byte samples;                           // Number of ADC samples
+  byte refFlag;                           // Internal control flag for ADC
+  unsigned int vBandgap;                  // Voltage of internal bandgap reference (mV)
+  unsigned int rIntLow;                   // Internal pin resistance of µC in low mode (0.1 Ohms)
+  unsigned int rIntHigh;                  // Internal pin resistance of µC in high mode (0.1 Ohms)
+  unsigned int rZero;                     // Resistance of probe leads (2 in series) (0.01 Ohms)
+  byte capZero;                           // Capacity zero offset (input + leads) (pF)
+  signed char refOffset;                  // Voltage offset of bandgap reference (mV)
+  signed char compOffset;                 // Voltage offset of analog comparator (mV)
+} Parameters;
 
 // Probes
 typedef struct {
   // Probe pins
-  byte Pin_1;                             // Probe-1
-  byte Pin_2;                             // Probe-2
-  byte Pin_3;                             // Probe-3
+  byte pin1;                              // Probe-1
+  byte pin2;                              // Probe-2
+  byte pin3;                              // Probe-3
   // Bit masks for switching probes and test resistors
-  byte R_low_1_mask;                      // Rl mask for probe-1
-  byte R_high_1_mask;                     // Rh mask for probe-1
-  byte R_low_2_mask;                      // Rl mask for probe-2
-  byte R_high_2_mask;                     // Rh mask for probe-2
-  byte R_low_3_mask;                      // Rl mask for probe-3
-  byte R_high_3_mask;                     // Rh mask for probe-3
-  byte Probe_1_ADC;                       // ADC mask for probe-1
-  byte Probe_2_ADC;                       // ADC mask for probe-2
-} Probe_Type;
+  byte rLow1Mask;                      // rLow mask for probe-1
+  byte rHigh1Mask;                     // rHigh mask for probe-1
+  byte rLow2Mask;                      // rLow mask for probe-2
+  byte rHigh2Mask;                     // rHigh mask for probe-2
+  byte rLow3Mask;                      // rLow mask for probe-3
+  byte rHigh3Mask;                     // rHigh mask for probe-3
+  byte probe1Adc;                       // ADC mask for probe-1
+  byte probe2Adc;                       // ADC mask for probe-2
+} Probes;
 
 // Checking/probing
 typedef struct {
-  byte Done;                              // Flag for transistor detection done
-  byte Found;                             // Component type which was found
-  byte Type;                              // Component specific subtype
-  byte Resistors;                         // Number of resistors found
-  byte Diodes;                            // Number of diodes found
-  byte Probe;                             // Error: probe pin
-  unsigned int U;                         // Error: voltage left in mV
-} Check_Type;
+  byte done;                              // Flag for transistor detection done
+  byte found;                             // Component type which was found
+  byte type;                              // Component specific subtype
+  byte resistors;                         // Number of resistors found
+  byte diodes;                            // Number of diodes found
+  byte probe;                             // Error: probe pin
+  unsigned int v;                         // Error: voltage left in mV
+} Checks;
 
 // Resistor
 typedef struct {
-  byte A;                                 // Probe pin #1
-  byte B;                                 // Probe pin #2
-  byte Scale;                             // Exponent of factor (value * 10^x)
-  unsigned long Value;                    // Resistance
-} Resistor_Type;
+  byte a;                                 // Probe pin #1
+  byte b;                                 // Probe pin #2
+  byte scale;                             // Exponent of factor (value * 10^x)
+  unsigned long value;                    // Resistance
+} Resistors;
 
 // Capacitor
 typedef struct {
-  byte A;                                 // Probe pin #1
-  byte B;                                 // Probe pin #2
-  signed char Scale;                      // Exponent of factor (value * 10^x)
-  unsigned long Value;                    // Capacitance incl. zero offset
-  unsigned long Raw;                      // Capacitance excl. zero offset
-} Capacitor_Type;
+  byte a;                                 // Probe pin #1
+  byte b;                                 // Probe pin #2
+  signed char scale;                      // Exponent of factor (value * 10^x)
+  unsigned long value;                    // Capacitance incl. zero offset
+  unsigned long raw;                      // Capacitance excl. zero offset
+} Capacitors;
 
 // Inductor
 typedef struct {
-  signed char Scale;                      // Exponent of factor (value * 10^x)
-  unsigned long Value;                    // Inductance
-} Inductor_Type;
+  signed char scale;                      // Exponent of factor (value * 10^x)
+  unsigned long value;                    // Inductance
+} Inductors;
 
 // Diode
 typedef struct {
-  byte A;                                 // Probe pin connected to anode
-  byte C;                                 // Probe pin connected to cathode
-  unsigned int V_f;                       // Forward voltage in mV (high current)
-  unsigned int V_f2;                      // Forward voltage in mV (low current)
-} Diode_Type;
+  byte a;                                 // Probe pin connected to anode
+  byte c;                                 // Probe pin connected to cathode
+  unsigned int vF;                       // Forward voltage in mV (high current)
+  unsigned int vF2;                      // Forward voltage in mV (low current)
+} Diodes;
 
 // Bipolar junction transistor
 typedef struct {
-  byte B;                                 // Probe pin connected to base
-  byte C;                                 // Probe pin connected to collector
-  byte E;                                 // Probe pin connected to emitter
-  unsigned long hFE;                      // Current amplification factor
-  // U_BE voltage
-  unsigned int I_CE0;                     // Leakage current (in µA)
-} BJT_Type;
+  byte b;                                 // Probe pin connected to base
+  byte c;                                 // Probe pin connected to collector
+  byte e;                                 // Probe pin connected to emitter
+  unsigned long hFe;                      // Current amplification factor
+  unsigned int iCeo;                     // Leakage current (in µA)
+} Bjts;
 
 // FET
 typedef struct {
-  byte G;                                 // Test pin connected to gate
-  byte D;                                 // Test pin connected to drain
-  byte S;                                 // Test pin connected to source
-  unsigned int V_th;                      // Threshold voltage of gate in mV
-} FET_Type;
+  byte g;                                 // Test pin connected to gate
+  byte d;                                 // Test pin connected to drain
+  byte s;                                 // Test pin connected to source
+  unsigned int vTh;                      // Threshold voltage of gate in mV
+} Fets;
 
-// Output buffers
-char OutBuffer[12];
-char PRGBuffer[32];
+// Output buffer
+char outBuffer[12];
 
 // Configuration
-Config_Type Config;                       // Tester modes, offsets and values
+Parameters parameters;                    // Tester modes, offsets and values
 
 // Probing
-Probe_Type Probes;                        // Test probes
-Check_Type Check;                         // Checking/testing
+Probes probes;                            // Test probes
+Checks check;                             // Checking/testing
 
 // Components
-Resistor_Type Resistors[3];               // Resistors (3 combinations)
-Capacitor_Type Caps[3];                   // Capacitors (3 combinations)
-Diode_Type Diodes[6];                     // Diodes (3 combinations in 2 directions)
-BJT_Type BJT;                             // Bipolar junction transistor
-FET_Type FET;                             // FET
-Inductor_Type Inductor;                   // Inductor
+Resistors resistors[3];                   // Resistors (3 combinations)
+Capacitors caps[3];                       // Capacitors (3 combinations)
+Diodes diodes[6];                     // Diodes (3 combinations in 2 directions)
+Bjts bjt;                             // Bipolar junction transistor
+Fets fet;                             // FET
+Inductors inductor;                       // Inductor
 
-byte sym_LOW1[8]   = { B00000000, B00000000, B00000000, B00010000,
+byte symLOW1[8]   = { B00000000, B00000000, B00000000, B00010000,
                        B00010010, B00010101, B00010101, B00011010 };
 
-byte sym_LOW2[8]   = { B00000000, B00000000, B00000000, B00000000,
+byte symLOW2[8]   = { B00000000, B00000000, B00000000, B00000000,
                        B00010001, B00010001, B00010101, B00001010 };
 
-byte sym_R[8]      = { B00000000, B00000000, B00011000, B00010100,
+byte symR[8]      = { B00000000, B00000000, B00011000, B00010100,
                        B00010100, B00011000, B00010100, B00010100 };
 
-byte sym_F[8]      = { B00000000, B00000000, B00011100, B00010000,
+byte symF[8]      = { B00000000, B00000000, B00011100, B00010000,
                        B00010000, B00011000, B00010000, B00010000 };
 
-byte sym_RES1[8]   = { B00000100, B00000100, B00000100, B00000100,
+byte symRES1[8]   = { B00000100, B00000100, B00000100, B00000100,
                        B00011111, B00010001, B00010001, B00010001 };
 
-byte sym_RES2[8]   = { B00010001, B00010001, B00010001, B00010001,
+byte symRES2[8]   = { B00010001, B00010001, B00010001, B00010001,
                        B00011111, B00000100, B00000100, B00000100 };
 
-byte sym_CAP1[8]   = { B00000000, B00000100, B00000100, B00000100,
+byte symCAP1[8]   = { B00000000, B00000100, B00000100, B00000100,
                        B00000100, B00000100, B00011111, B00011111 };
 
-byte sym_CAP2[8]   = { B00011111, B00011111, B00000100, B00000100,
+byte symCAP2[8]   = { B00011111, B00011111, B00000100, B00000100,
                        B00000100, B00000100, B00000100, B00000000 };
 
-byte sym_FE[8]     = { B00000000, B00000000, B00000000, B00011011,
+byte symFE[8]     = { B00000000, B00000000, B00000000, B00011011,
                        B00010010, B00011011, B00010010, B00010011 };
 
-byte sym_BE1[8]    = { B00000000, B00000000, B00000000, B00000110,
+byte symBE1[8]    = { B00000000, B00000000, B00000000, B00000110,
                        B00000101, B00000110, B00000101, B00000110 };
 
-byte sym_BE2[8]    = { B00000000, B00000000, B00000000, B00011100,
+byte symBE2[8]    = { B00000000, B00000000, B00000000, B00011100,
                        B00010000, B00011100, B00010000, B00011100 };
 
-byte sym_CE1[8]    = { B00000000, B00000000, B00000000, B00011101,
+byte symCE1[8]    = { B00000000, B00000000, B00000000, B00011101,
                        B00010001, B00010001, B00010001, B00011101 };
 
-byte sym_CE2[8]    = { B00000000, B00000000, B00000000, B00010111,
+byte symCE2[8]    = { B00000000, B00000000, B00000000, B00010111,
                        B00000101, B00010101, B00000101, B00010111 };
 
-byte sym_NPN[8]    = { B00000001, B00010010, B00010100, B00011000,
+byte symNPN[8]    = { B00000001, B00010010, B00010100, B00011000,
                        B00011000, B00010100, B00010011, B00000011 };
 
-byte sym_PNP[8]    = { B00000001, B00010010, B00011100, B00011100,
+byte symPNP[8]    = { B00000001, B00010010, B00011100, B00011100,
                        B00011000, B00010100, B00010010, B00000001 };
 
-byte sym_IND1[8]   = { B00000100, B00000100, B00000100, B00000100,
+byte symIND1[8]   = { B00000100, B00000100, B00000100, B00000100,
                        B00011111, B00011111, B00011111, B00011111 };
 
-byte sym_IND2[8]   = { B00011111, B00011111, B00011111, B00011111,
+byte symIND2[8]   = { B00011111, B00011111, B00011111, B00011111,
                        B00011111, B00000100, B00000100, B00000100 };
 
-byte sym_DIODE1[8] = { B00000100, B00000100, B00000100, B00000100,
-                       B00011111, B00001110, B00000100, B00011111 };
-
-#define sym_THY1 sym_DIODE1
-
-byte sym_DIODE2[8] = { B00000100, B00000100, B00000100, B00000100,
-                       B00000000, B00000000, B00000000, B00000000 };
-
-byte sym_THY2[8]   = { B00000100, B00001100, B00010100, B00000100,
-                       B00000000, B00000000, B00000000, B00000000 };
-
-byte sym_THY3[8]   = { B00000000, B00000000, B00011111, B00000000,
-                       B00000000, B00000000, B00000000, B00000000 };
-
-byte sym_TRI1[8]   = { B00000001, B00000001, B00000001, B00011111,
-                       B00000100, B00001110, B00001110, B00011111 };
-
-byte sym_TRI2[8]   = { B00000000, B00000000, B00000000, B00011111,
+byte symDIODE1[8] = { B00000100, B00000100, B00000100, B00011111,
                        B00001110, B00001110, B00000100, B00011111 };
 
-byte sym_TRI3[8]   = { B00000101, B00000101, B00001001, B00011001,
+#define symTHY1 symDIODE1
+
+byte symDIODE2[8] = { B00000100, B00000100, B00000100, B00000100,
+                       B00000000, B00000000, B00000000, B00000000 };
+
+byte symTHY2[8]   = { B00000100, B00001100, B00010100, B00000100,
+                       B00000000, B00000000, B00000000, B00000000 };
+
+byte symTHY3[8]   = { B00000000, B00000000, B00011111, B00000000,
+                       B00000000, B00000000, B00000000, B00000000 };
+
+byte symTRI1[8]   = { B00000001, B00000001, B00000001, B00011111,
+                       B00000100, B00001110, B00001110, B00011111 };
+
+byte symTRI2[8]   = { B00000000, B00000000, B00000000, B00011111,
+                       B00001110, B00001110, B00000100, B00011111 };
+
+byte symTRI3[8]   = { B00000101, B00000101, B00001001, B00011001,
                        B00000001, B00000001, B00000001, B00000001 };
 
-byte sym_FET[8]    = { B00000010, B00010010, B00011110, B00010000,
+byte symFet[8]    = { B00000010, B00010010, B00011110, B00010000,
                        B00010000, B00011110, B00010010, B00000010 };
 
-byte sym_NFETG[8]  = { B00000000, B00000000, B00000000, B00000000,
+byte symNFetG[8]  = { B00000000, B00000000, B00000000, B00000000,
                        B00000010, B00011111, B00000010, B00000000 };
 
-byte sym_PFETG[8]  = { B00000000, B00000010, B00011111, B00000010,
+byte symPFetG[8]  = { B00000000, B00000010, B00011111, B00000010,
                        B00000000, B00000000, B00000000, B00000000 };
 
-byte sym_PFETD[8]  = { B00000010, B00000010, B00000010, B00011000,
+byte symPFetD[8]  = { B00000010, B00000010, B00000010, B00011000,
                        B00010100, B00010100, B00010100, B00011000 };
 
-byte sym_NFETD[8]  = { B00011000, B00010100, B00010100, B00010100,
+byte symNFetD[8]  = { B00011000, B00010100, B00010100, B00010100,
                        B00011000, B00000010, B00000010, B00000010 };
 
-byte sym_PFETS[8]  = { B00001100, B00010000, B00001000, B00000100,
+byte symPFetS[8]  = { B00001100, B00010000, B00001000, B00000100,
                        B00011000, B00000010, B00000010, B00000010 };
 
-byte sym_NFETS[8]  = { B00000010, B00000010, B00000010, B00001100,
+byte symNFetS[8]  = { B00000010, B00000010, B00000010, B00001100,
                        B00010000, B00001000, B00000100, B00011000 };
 
-byte sym_JFETT[8]  = { B00000000, B00000000, B00000000, B00000000,
+byte symJFetT[8]  = { B00000000, B00000000, B00000000, B00000000,
                        B00000000, B00000010, B00000010, B00000010 };
 
-byte sym_JFETB[8]  = { B00000010, B00000010, B00000010, B00000000,
+byte symJFetB[8]  = { B00000010, B00000010, B00000010, B00000000,
                        B00000000, B00000000, B00000000, B00000000 };
 
-byte sym_H[8]      = { B00010000, B00010110, B00011001, B00010001,
+byte symH[8]      = { B00010000, B00010110, B00011001, B00010001,
                        B00010001, B00010001, B00000000, B00000000 };
 
-byte sym_V[8]      = { B00010001, B00010001, B00010001, B00010001,
+byte symV[8]      = { B00010001, B00010001, B00010001, B00010001,
                        B00001010, B00000100, B00000000, B00000000 };
 
-byte sym_I[8]      = { B00001110, B00000100, B00000100, B00000100,
+byte symI[8]      = { B00001110, B00000100, B00000100, B00000100,
                        B00000100, B00001110, B00000000, B00000000 };
+
+byte symIGBT1[8]  = { B00000000, B00000000, B00000000, B00000000,
+                       B00000000, B00000000, B00000001, B00000010 };
+
+byte symIGBT2[8]  = { B00010000, B00010000, B00010000, B00010000,
+                       B00010000, B00010000, B00011100, B00000100 };
+
+byte symIGBT3[8]  = { B00000000, B00000001, B00000001, B00000001,
+                       B00000001, B00000001, B00011111, B00000000 };
+
+byte symIGBT4[8]  = { B00010010, B00010100, B00011000, B00010000,
+                       B00010000, B00011000, B00010100, B00000010 };
+
+byte symIGBT5[8]  = { B00000100, B00000100, B00011111, B00000100,
+                       B00001110, B00001110, B00011111, B00000100 };
+
+byte symIGBT6[8]  = { B00000011, B00000011, B00000000, B00000000,
+                       B00000000, B00000000, B00000000, B00000000 };
+
+byte symIGBT7[8]  = { B00000100, B00000100, B00011100, B00010000,
+                       B00010000, B00010000, B00010000, B00010000 };
 
 // Prefix Table
 //                                     -12  -9   -6              -3   0  +3   +6
-const unsigned char Prefix_table[]  = {'p', 'n', LCD_CHAR_MICRO, 'm', 0, 'k', 'M'};
+const unsigned char prefixTable[]  = {'p', 'n', LCD_CHAR_MICRO, 'm', 0, 'k', 'M'};
 
 // Voltage based factors for large caps (using R low)
-const unsigned int LargeCap_table[]  = { 23022, 21195, 19629, 18272, 17084,
+const unsigned int largeCapTable[]  = { 23022, 21195, 19629, 18272, 17084,
                                          16036, 15104, 14271, 13520, 12841,
                                          12224, 11660, 11143, 10668, 10229,
                                          9822, 9445, 9093, 8765, 8458, 8170,
@@ -411,23 +432,23 @@ const unsigned int LargeCap_table[]  = { 23022, 21195, 19629, 18272, 17084,
                                          4839, 4731, 4627, 4526, 4430, 4336 };
 
 // Voltage based factors for small caps (using R high)
-const unsigned int SmallCap_table[]  = { 954, 903, 856, 814, 775, 740, 707, 676, 648 };
+const unsigned int smallCapTable[]  = { 954, 903, 856, 814, 775, 740, 707, 676, 648 };
 
 // Ratio based factors for inductors
-const unsigned int Inductor_table[]  = { 4481, 3923, 3476, 3110, 2804, 2544,
+const unsigned int inductorTable[]  = { 4481, 3923, 3476, 3110, 2804, 2544,
                                          2321, 2128, 1958, 1807, 1673, 1552,
                                          1443, 1343, 1252, 1169, 1091, 1020,
                                          953, 890, 831, 775, 721, 670, 621,
                                          574, 527, 481, 434, 386, 334, 271 };
 
 // Bitmasks for R low probe resistors based on probe ID
-const unsigned char Rl_table[]  = { (1 << (TP1 * 2)), (1 << (TP2 * 2)), (1 << (TP3 * 2)) };
+const unsigned char rLowTable[]  = { (1 << (TP1 * 2)), (1 << (TP2 * 2)), (1 << (TP3 * 2)) };
 
 // Bitmasks for ADC pins based on probe ID
-const unsigned char ADC_table[]  = { (1 << TP1), (1 << TP2), (1 << TP3) };
+const unsigned char adcTable[]  = { (1 << TP1), (1 << TP2), (1 << TP3) };
 
 SoftwareSerial lcd(-1, TXPIN);
-ButtonCtl Test(TEST_BUTTON);
+ButtonCtl testButton(TEST_BUTTON);
 
 // Define character, Newhaven Displays LCD
 // Will convert later to 4WireLCD
@@ -558,7 +579,7 @@ void lcd_setbaud(long int b) {
 
 // Setup function
 void setup() {
-  byte Test;                              // Test value
+  byte test;                              // Test value
 
   pinMode(DISCHARGE_RELAY, OUTPUT);
   digitalWrite(DISCHARGE_RELAY, HIGH);
@@ -576,16 +597,15 @@ void setup() {
                                           // - Disable digital input on analog pins
   wdt_disable();                          // Disable watchdog
   // Default offsets and values
-  Config.Samples = ADC_SAMPLES;           // Number of ADC samples
-  Config.AutoScale = 1;                   // Enable ADC auto scaling
-  Config.RefFlag = 1;                     // No ADC reference set yet
+  parameters.samples = ADC_SAMPLES;           // Number of ADC samples
+  parameters.refFlag = 1;                     // No ADC reference set yet
   delay(100);
 
   // Reset variables
   analogReference(EXTERNAL);              // Set Analog Reference to External
 
   // Init
-  LoadAdjust();                           // Load adjustment values
+  loadAdjust();                           // Load adjustment values
 
 #ifdef DEBUG_PRINT
   Serial.print(F("Nikol MCT-1601"));
@@ -602,19 +622,19 @@ byte gogohut = 0;
 
 // Main loop
 void loop() {
-  byte Test;
+  byte test;
 
   pinMode(TEST_BUTTON, INPUT_PULLUP);
   // Reset variables
-  Check.Found = COMP_NONE;
-  Check.Type = 0;
-  Check.Done = 0;
-  Check.Diodes = 0;
-  Check.Resistors = 0;
-  BJT.hFE = 0;
-  BJT.I_CE0 = 0;
+  check.found = COMP_NONE;
+  check.type = 0;
+  check.done = 0;
+  check.diodes = 0;
+  check.resistors = 0;
+  bjt.hFe = 0;
+  bjt.iCeo = 0;
   // Reset hardware
-  SetADCHiz();                            // Set all pins of ADC port as input
+  setAdcHighZ();                            // Set all pins of ADC port as input
   if(!gogohut) {
     lcd_clear();
     lcd.print(F("   Nikol MCT-1601"));
@@ -627,19 +647,17 @@ void loop() {
   }
   
   // Internal bandgap reference
-  Config.U_Bandgap = ReadU(0x0e);         // Dummy read for bandgap stabilization
-  Config.Samples = 200;                   // Do a lot of samples for high accuracy
-  Config.U_Bandgap = ReadU(0x0e);         // Get voltage of bandgap reference
-  Config.Samples = ADC_SAMPLES;           // Set samples back to default
-  Config.U_Bandgap += Config.RefOffset;   // Add voltage offset
+  parameters.vBandgap = readVoltage(0x0e, 1);      // Dummy read for bandgap stabilization
+  parameters.vBandgap = readVoltage(0x0e, 1);      // Get voltage of bandgap reference
+  parameters.vBandgap += parameters.refOffset;   // Add voltage offset
   digitalWrite(DISCHARGE_RELAY, HIGH);    // Turn off relay (discharge DUT)
-  Test = TestKey();
-  if(Test == 2) {                         // Long Press
+  test = testKey();
+  if(test == 2) {                         // Long Press
     wdt_disable();                        // Disable watchdog
-    AdjustAndSave();                      // Calibrate
+    adjustAndSave();                      // Calibrate
   } else {
     if(!gogohut) lcd_clear();
-    if(AllProbesShorted() == 3) {         // All probes Shorted!
+    if(allProbesShorted() == 3) {         // All probes Shorted!
 #ifdef DEBUG_PRINT
         Serial.println();
 #endif
@@ -651,27 +669,27 @@ void loop() {
         // Display start of probing
         digitalWrite(DISCHARGE_RELAY, LOW); // Turn on relay (connect DUT to tester)
         if(!gogohut) lcd.print(F("Discharging DUT..."));
-        DischargeProbes();
+        dischargeProbes();
         if(!gogohut) lcd_setcursor(0, 2);              // Move to line #2
         if(!gogohut) lcd.print(F("Testing..."));    // Display: Testing...
-        if(Check.Found == COMP_ERROR) {   // Discharge failed
+        if(check.found == COMP_ERROR) {   // Discharge failed
           lcd.print(F("Battery?"));
           // Display probe number and remaining voltage
           lcd_setcursor(0, 2);
-          lcd_testpin(Check.Probe);
+          lcd_testpin(check.probe);
           lcd.write(':');
           lcd.write(' ');
-          DisplayValue(Check.U, -3, 'V');
+          displayValue(check.v, -3, 'V');
         } else {                          // Skip all other checks
           // Check all 6 combinations of the 3 probes
-          CheckProbes(TP1, TP2, TP3);
-          CheckProbes(TP2, TP1, TP3);
-          CheckProbes(TP1, TP3, TP2);
-          CheckProbes(TP3, TP1, TP2);
-          CheckProbes(TP2, TP3, TP1);
-          CheckProbes(TP3, TP2, TP1);
+          checkProbes(TP1, TP2, TP3);
+          checkProbes(TP2, TP1, TP3);
+          checkProbes(TP1, TP3, TP2);
+          checkProbes(TP3, TP1, TP2);
+          checkProbes(TP2, TP3, TP1);
+          checkProbes(TP3, TP2, TP1);
           // If component might be a capacitor
-          if(Check.Found == COMP_NONE || Check.Found == COMP_RESISTOR) {
+          if(check.found == COMP_NONE || check.found == COMP_RESISTOR) {
 #ifdef DEBUG_PRINT
             Serial.println();
             Serial.println(F("Wait a moment..."));
@@ -684,16 +702,16 @@ void loop() {
               lcd.write('C');
             }
             // Check all possible combinations
-            MeasureCap(TP3, TP1, 0);
-            MeasureCap(TP3, TP2, 1);
-            MeasureCap(TP2, TP1, 2);
+            measureCap(TP3, TP1, 0);
+            measureCap(TP3, TP2, 1);
+            measureCap(TP2, TP1, 2);
           }
           lcd_clear();
           // Call output function based on component type
 #ifdef DEBUG_PRINT
           Serial.print(F("Found: "));
           // Components ID's
-          switch (Check.Found) {
+          switch (check.found) {
             case COMP_ERROR:
               Serial.println(F("Component Error!"));
               break;
@@ -740,148 +758,147 @@ void loop() {
           }
 #endif
           lcd_clear();
-          switch (Check.Found) {
+          switch (check.found) {
             case COMP_ERROR:
-              ShowError();
+              showError();
               break;
 
             case COMP_DIODE:
-              ShowDiode();
+              showDiode();
               break;
 
             case COMP_BJT:
-              ShowBJT();
+              showBjt();
               break;
 
             case COMP_FET:
-              ShowFET();
+              showFet();
               break;
 
             case COMP_IGBT:
-              ShowIGBT();
+              showIGBT();
               break;
 
             case COMP_THYRISTOR:
-              ShowSpecial();
+              showSpecial();
               break;
 
             case COMP_TRIAC:
-              ShowSpecial();
+              showSpecial();
               break;
 
             case COMP_RESISTOR:
-              ShowResistor();
+              showResistor();
               break;
 
             case COMP_CAPACITOR:
-              ShowCapacitor();
+              showCapacitor();
               break;
 
             default:                      // No component found
-              ShowFail();
+              showFail();
           }
         }
      }
   }
-  TestKey();                            // Let the user read the text
+  testKey();                            // Let the user read the text
   wdt_disable();                          // Disable watchdog
 }
 
 // Set ADC port to HiZ mode
-void SetADCHiz(void) {
+void setAdcHighZ(void) {
   ADC_DDR &= ~(1<<TP1);
   ADC_DDR &= ~(1<<TP2);
   ADC_DDR &= ~(1<<TP3);
 }
 
 // Set ADC port low
-void SetADCLow(void) {
+void setAdcLow(void) {
   ADC_PORT &= ~(1<<TP1);
   ADC_PORT &= ~(1<<TP2);
   ADC_PORT &= ~(1<<TP3);
 }
 
 // Setup probes, bitmasks for probes and test resistors
-void UpdateProbes(byte Probe1, byte Probe2, byte Probe3) {
+void updateProbes(byte probe1, byte probe2, byte probe3) {
   // DSt probe IDs
-  Probes.Pin_1 = Probe1;
-  Probes.Pin_2 = Probe2;
-  Probes.Pin_3 = Probe3;
+  probes.pin1 = probe1;
+  probes.pin2 = probe2;
+  probes.pin3 = probe3;
   // Setup masks using bitmask tables
-  Probes.R_low_1_mask = Rl_table[Probe1];
-  Probes.R_high_1_mask = Probes.R_low_1_mask + Probes.R_low_1_mask;
-  Probes.Probe_1_ADC = ADC_table[Probe1];
-  Probes.R_low_2_mask = Rl_table[Probe2];
-  Probes.R_high_2_mask = Probes.R_low_2_mask + Probes.R_low_2_mask;
-  Probes.Probe_2_ADC = ADC_table[Probe2];
-  Probes.R_low_3_mask = Rl_table[Probe3];
-  Probes.R_high_3_mask = Probes.R_low_3_mask + Probes.R_low_3_mask;
+  probes.rLow1Mask = rLowTable[probe1];
+  probes.rHigh1Mask = probes.rLow1Mask + probes.rLow1Mask;
+  probes.probe1Adc = adcTable[probe1];
+  probes.rLow2Mask = rLowTable[probe2];
+  probes.rHigh2Mask = probes.rLow2Mask + probes.rLow2Mask;
+  probes.probe2Adc = adcTable[probe2];
+  probes.rLow3Mask = rLowTable[probe3];
+  probes.rHigh3Mask = probes.rLow3Mask + probes.rLow3Mask;
 }
 
 // Check for a short circuit between two probes
-byte ShortedProbes(byte Probe1, byte Probe2) {
-  byte Flag = 0;                          // Return value
-  unsigned int U1;                        // Voltage at probe #1 in mV
-  unsigned int U2;                        // Voltage at probe #2 in mV
+byte shortedProbes(byte probe1, byte probe2) {
+  byte flag = 0;                          // Return value
+  unsigned int v1;                        // Voltage at probe #1 in mV
+  unsigned int v2;                        // Voltage at probe #2 in mV
 
 //   Set up a voltage divider between the two probes:
-//    - Probe1: Rl pull-up
-//    - Probe2: Rl pull-down
+//    - probe1: rLow pull-up
+//    - probe2: rLow pull-down
 //    - third probe: HiZ
 
-  R_PORT = Rl_table[Probe1];
-  R_DDR = Rl_table[Probe1] | Rl_table[Probe2];
+  R_PORT = rLowTable[probe1];
+  R_DDR = rLowTable[probe1] | rLowTable[probe2];
   // Read voltages
-  U1 = ReadU(Probe1);
-  U2 = ReadU(Probe2);
+  v1 = readVoltage(probe1, 1);
+  v2 = readVoltage(probe2, 1);
 
 //   We expect both probe voltages to be about the same and
 //   to be half of Vcc (allowed difference +/- 30mV).
 
-  if((U1 > UREF_VCC/2 - 30) && (U1 < UREF_VCC/2 + 30)) {
-    if((U2 > UREF_VCC/2 - 30) && (U2 < UREF_VCC/2 + 30)) {
-      Flag = 1;
-    }
-  }
+  if((v1 > VREF_VCC / 2 - 30) && (v1 < VREF_VCC / 2 + 30)
+   &&(v2 > VREF_VCC / 2 - 30) && (v2 < VREF_VCC / 2 + 30)) flag = 1;
+
   // Reset port
   R_DDR = 0;
-  return Flag;
+  return flag;
 }
 
  // Check for a short circuit between all probes
-byte AllProbesShorted(void) {
-  byte Flag = 0;                          // Return value
+byte allProbesShorted(void) {
+  byte flag;                              // Return value
 
   // Check all possible combinations
-  Flag = ShortedProbes(TP1, TP2);
-  Flag += ShortedProbes(TP1, TP3);
-  Flag += ShortedProbes(TP2, TP3);
-  return Flag;
+  flag = shortedProbes(TP1, TP2);
+  flag += shortedProbes(TP1, TP3);
+  flag += shortedProbes(TP2, TP3);
+  return flag;
 }
 
 // Try to discharge any connected components, e.g. capacitors
 // The discharge relay should already have accomplished this,
-// so this is more of a test that it worked.
-void DischargeProbes(void) {
-  byte Counter;                           // Loop control
-  byte Limit = 40;                        // Sliding timeout (2s)
-  byte ID;                                // Test pin
-  byte DischargeMask;                     // Bitmask
-  unsigned int U_c;                       // Current voltage
-  unsigned int U_old[3];                  // Old voltages
+// the first time it's called, so in that case this is more of
+// a test that it worked. Subsequent calls really do something.
+void dischargeProbes(void) {
+  byte cnt;                           // Loop control
+  byte limit = 40;                        // Sliding timeout (2s)
+  byte id;                                // Test pin
+  byte dischargeMask;                     // Bitmask
+  unsigned int vNow;                       // Current voltage
+  unsigned int vOld[3];                  // Old voltages
 
-  // Set probes to a save discharge mode (pull-down via Rh)
+  // Set probes to a save discharge mode (pull-down via rHigh)
   // Set ADC port to HiZ input
-  SetADCHiz();
-  SetADCLow();
-  // All probe pins: Rh and Rl pull-down
+  setAdcHighZ();
+  setAdcLow();
+  // All probe pins: rHigh and rLow pull-down
   R_PORT = 0;
   R_DDR = (2 << (TP1 * 2)) | (2 << (TP2 * 2)) | (2 << (TP3 * 2));
   R_DDR |= (1 << (TP1 * 2)) | (1 << (TP2 * 2)) | (1 << (TP3 * 2));
   // Get voltages
-  U_old[0] = ReadU(TP1);
-  U_old[1] = ReadU(TP2);
-  U_old[2] = ReadU(TP3);
+  vOld[0] = readVoltage(TP1, 1);
+  vOld[1] = readVoltage(TP2, 1);
+  vOld[2] = readVoltage(TP3, 1);
 
 //   Try to discharge probes
 //    - We check if the voltage decreases over time.
@@ -890,43 +907,43 @@ void DischargeProbes(void) {
 //    - A very large cap will discharge too slowly and an external voltage
 //      maybe never :-)
 
-  Counter = 1;
-  ID = 2;
-  DischargeMask = 0;
-  while (Counter > 0) {
-    ID++;                                 // Next probe
-    if(ID > 2) ID = 0;                    // Start with probe #1 again
-    if(DischargeMask & (1 << ID))         // Skip discharged probe
+  cnt = 1;
+  id = 2;
+  dischargeMask = 0;
+  while (cnt > 0) {
+    id++;                                 // Next probe
+    if(id > 2) id = 0;                    // Start with probe #1 again
+    if(dischargeMask & (1 << id))         // Skip discharged probe
       continue;
-    U_c = ReadU(ID);                      // Get voltage of probe
-    if(U_c < U_old[ID]) {                 // Voltage decreased
-      U_old[ID] = U_c;                    // Update old value
+    vNow = readVoltage(id, 1);                   // Get voltage of probe
+    if(vNow < vOld[id]) {                 // Voltage decreased
+      vOld[id] = vNow;                    // Update old value
       // Adapt timeout based on discharge rate
-      if((Limit - Counter) < 20) {
+      if((limit - cnt) < 20) {
         // Increase timeout while preventing overflow
-        if(Limit < (255 - 20)) Limit += 20;
+        if(limit < (255 - 20)) limit += 20;
       }
-      Counter = 1;                        // Reset no-changes counter
+      cnt = 1;                        // Reset no-changes counter
     } else {                              // Voltage not decreased
       // Increase limit if we start at a low voltage
-      if((U_c < 10) && (Limit <= 40)) Limit = 80;
-      Counter++;                          // Increase no-changes counter
+      if((vNow < 10) && (limit <= 40)) limit = 80;
+      cnt++;                          // Increase no-changes counter
     }
-    if(U_c <= CAP_DISCHARGED) {           // Seems to be discharged
-      DischargeMask |= (1 << ID);         // Set flag
-    } else if(U_c < 800) {                // Extra pull-down
+    if(vNow <= CAP_DISCHARGED) {           // Seems to be discharged
+      dischargeMask |= (1 << id);         // Set flag
+    } else if(vNow < 800) {                // Extra pull-down
       // It's safe now to pull-down probe pin directly
-      ADC_DDR |= ADC_table[ID];
+      ADC_DDR |= adcTable[id];
     }
-    if(DischargeMask == B00000111) {      // All probes discharged
-      Counter = 0;                        // End loop
-    } else if(Counter > Limit) {          // No decrease for some time
+    if(dischargeMask == B00000111) {      // All probes discharged
+      cnt = 0;                        // End loop
+    } else if(cnt > limit) {          // No decrease for some time
       // Might be a battery or a super cap
-      Check.Found = COMP_ERROR;           // Report error
-      Check.Type = TYPE_DISCHARGE;        // Discharge problem
-      Check.Probe = ID;                   // Save probe
-      Check.U = U_c;                      // Save voltage
-      Counter = 0;                        // End loop
+      check.found = COMP_ERROR;           // Report error
+      check.type = TYPE_DISCHARGE;        // Discharge problem
+      check.probe = id;                   // Save probe
+      check.v = vNow;                      // Save voltage
+      cnt = 0;                        // End loop
     } else {                              // Go for another round
       wdt_reset();                        // Reset watchdog
       delay(50);                          // Wait for 50ms
@@ -934,16 +951,16 @@ void DischargeProbes(void) {
   }
   // Reset probes
   R_DDR = 0;                              // Set resistor port to input mode
-  SetADCHiz();                            // Set ADC port to input mode
+  setAdcHighZ();                            // Set ADC port to input mode
 }
 
 // Pull probe up/down via probe resistor for 1 or 10 ms
-void PullProbe(byte Mask, byte Mode) {
+void pullProbe(byte Mask, byte mode) {
   // Set pull mode
-  if(Mode & FLAG_PULLUP) R_PORT |= Mask;  // Pull-up
+  if(mode & FLAG_PULLUP) R_PORT |= Mask;  // Pull-up
   else R_PORT &= ~Mask;                   // Pull-down
   R_DDR |= Mask;                          // Enable pulling
-  if(Mode & FLAG_1MS) delay(1);           // Wait 1ms
+  if(mode & FLAG_1MS) delay(1);           // Wait 1ms
   else delay(10);                         // Wait 10ms
   // Reset pulling
   R_DDR &= ~Mask;                         // Set to HiZ mode
@@ -951,85 +968,85 @@ void PullProbe(byte Mask, byte Mode) {
 }
 
 // Rescale value
-unsigned long RescaleValue(unsigned long Value, signed char Scale, signed char NewScale)
+unsigned long RescaleValue(unsigned long value, signed char scale, signed char newScale)
 {
-  unsigned long NewValue;
-  NewValue = Value;                       // Take old value
-  while (Scale != NewScale) {             // Processing loop
-    if(NewScale > Scale) {                // Upscale
-      NewValue /= 10;
-      Scale++;
+  unsigned long newValue;
+  newValue = value;                       // Take old value
+  while (scale != newScale) {             // Processing loop
+    if(newScale > scale) {                // Upscale
+      newValue /= 10;
+      scale++;
     } else {                              // Downscale
-      NewValue *= 10;
-      Scale--;
+      newValue *= 10;
+      scale--;
     }
   }
-  return NewValue;
+  return newValue;
 }
 
 // Lookup a voltage/ratio based factor in a table and interpolate its value
-unsigned int GetFactor(unsigned int U_in, byte ID) {
-  unsigned int Factor;                    // Return value
-  unsigned int U_Diff;                    // Voltage difference to table start
-  unsigned int Fact1, Fact2;              // Table entries
-  unsigned int TabStart;                  // Table start voltage
-  unsigned int TabStep;                   // Table step voltage
-  unsigned int TabIndex;                  // Table entries (-2)
-  unsigned int *Table;
-  byte Index;                             // Table index
-  byte Diff;                              // Difference to next entry
+unsigned int getFactor(unsigned int vIn, byte id) {
+  unsigned int factor;                    // Return value
+  unsigned int vDiff;                    // Voltage difference to table start
+  unsigned int fact1, fact2;              // Table entries
+  unsigned int tabStart;                  // Table start voltage
+  unsigned int tabStep;                   // Table step voltage
+  unsigned int tabIndex;                  // Table entries (-2)
+  unsigned int *table;
+  byte index;                             // Table index
+  byte diff;                              // Difference to next entry
 
   // Setup table specific stuff
-  if(ID == TABLE_SMALL_CAP) {
-    TabStart = 1000;                      // Table starts at 1000mV
-    TabStep = 50;                         // 50mV steps between entries
-    TabIndex = 7;                         // Entries in table - 2
-    Table = (unsigned int *) &SmallCap_table[0];  // Pointer to table start
-  } else if(ID == TABLE_LARGE_CAP) {
-    TabStart = 300;                       // Table starts at 1000mV
-    TabStep = 25;                         // 25mV steps between entries
-    TabIndex = 42;                        // Entries in table - 2
-    Table = (unsigned int *) &LargeCap_table[0];  // Pointer to table start
-  } else if(ID == TABLE_INDUCTOR) {
-    TabStart = 200;                       // Table starts at 200
-    TabStep = 25;                         // Steps between entries
-    TabIndex = 30;                        // Entries in table - 2
-    Table = (unsigned int *) &Inductor_table[0];  // Pointer to table start
+  if(id == TABLE_SMALL_CAP) {
+    tabStart = 1000;                      // Table starts at 1000mV
+    tabStep = 50;                         // 50mV steps between entries
+    tabIndex = 7;                         // Entries in table - 2
+    table = (unsigned int *) &smallCapTable[0];  // Pointer to table start
+  } else if(id == TABLE_LARGE_CAP) {
+    tabStart = 300;                       // Table starts at 1000mV
+    tabStep = 25;                         // 25mV steps between entries
+    tabIndex = 42;                        // Entries in table - 2
+    table = (unsigned int *) &largeCapTable[0];  // Pointer to table start
+  } else if(id == TABLE_INDUCTOR) {
+    tabStart = 200;                       // Table starts at 200
+    tabStep = 25;                         // Steps between entries
+    tabIndex = 30;                        // Entries in table - 2
+    table = (unsigned int *) &inductorTable[0];  // Pointer to table start
   } else return 0;
   // We interpolate the table values corresponding to the given voltage/ratio,
   // difference to start of table
-  if(U_in >= TabStart) U_Diff = U_in - TabStart;
-  else U_Diff = 0;
+  if(vIn >= tabStart) vDiff = vIn - tabStart;
+  else vDiff = 0;
   // Calculate table index
-  Index = U_Diff / TabStep;               // Index (position in table)
-  Diff = U_Diff % TabStep;                // Difference to index
-  Diff = TabStep - Diff;                  // Difference to next entry
+  index = vDiff / tabStep;               // Index (position in table)
+  diff = vDiff % tabStep;                // Difference to index
+  diff = tabStep - diff;                  // Difference to next entry
   // Prevent index overflow
-  if(Index > TabIndex) Index = TabIndex;
+  if(index > tabIndex) index = tabIndex;
   // Get values for index and next entry
-  Table += Index;                         // Advance to index
-  Fact1 = *(Table);
-  Table++;                                // Next entry
-  Fact2 = *(Table);
+  table += index;                         // Advance to index
+  fact1 = *(table);
+  table++;                                // Next entry
+  fact2 = *(table);
   // Interpolate values based on the difference
-  Factor = Fact1 - Fact2;
-  Factor *= Diff;
-  Factor += TabStep / 2;
-  Factor /= TabStep;
-  Factor += Fact2;
-  return Factor;
+  factor = fact1 - fact2;
+  factor *= diff;
+  factor += tabStep / 2;
+  factor /= tabStep;
+  factor += fact2;
+  return factor;
 }
 
 // Identify component
-void CheckProbes(byte Probe1, byte Probe2, byte Probe3) {
-  byte Flag;                              // Temporary value
-  unsigned int U_Rl;                      // Voltage across R low (load)
-  unsigned int U_1;                       // Voltage #1
+void checkProbes(byte probe1, byte probe2, byte probe3) {
+  byte flag;                              // Temporary value
+  unsigned int vRLow;                      // Voltage across R low (load)
+  unsigned int v1;                       // Voltage #1
 
   // Init
-  if(Check.Found == COMP_ERROR) return;   // Skip check on any error
+  if(check.found == COMP_ERROR) return;   // Skip check on any error
   wdt_reset();                            // Reset watchdog
-  UpdateProbes(Probe1, Probe2, Probe3);   // Update bitmasks
+  updateProbes(probe1, probe2, probe3);   // Update bitmasks
 
 //   We measure the current from probe 2 to ground with probe 1 pulled up
 //   to 5V and probe 3 in HiZ mode to determine if we got a self-conducting
@@ -1041,28 +1058,28 @@ void CheckProbes(byte Probe1, byte Probe2, byte Probe3) {
 
   // Set probes: Gnd -- R low -- probe-2 / probe-1 -- Vcc
   R_PORT = 0;                             // Set resistor port to Gnd
-  R_DDR = Probes.R_low_2_mask;            // Pull down probe-2 via R low
-  ADC_DDR = Probes.Probe_1_ADC;           // Set probe-1 to output
-  ADC_PORT = Probes.Probe_1_ADC;          // Pull-up probe-1 directly
+  R_DDR = probes.rLow2Mask;            // Pull down probe-2 via R low
+  ADC_DDR = probes.probe1Adc;           // Set probe-1 to output
+  ADC_PORT = probes.probe1Adc;          // Pull-up probe-1 directly
 
 //   For a possible n channel FET we pull down the gate for a few ms,
 //   assuming: probe-1 = D / probe-2 = S / probe-3 = G
 
   // Discharge gate via R low
-  PullProbe(Probes.R_low_3_mask, FLAG_10MS | FLAG_PULLDOWN);
-  U_Rl = ReadU_5ms(Probes.Pin_2);         // Get voltage at R low
+  pullProbe(probes.rLow3Mask, FLAG_10MS | FLAG_PULLDOWN);
+  vRLow = readVoltage5ms(probes.pin2);         // Get voltage at R low
 
 //   If we got conduction we could have a p channel FET. For any
-//   other part U_Rl will be the same.
+//   other part vRLow will be the same.
 
-  if(U_Rl >= 977) {                       // > 1.4mA
+  if(vRLow >= 977) {                       // > 1.4mA
 
 //     For a possible p channel FET we pull up the gate for a few ms,
 //     assuming: probe-1 = S / probe-2 = D / probe-3 = G
 
     // Discharge gate via R low
-    PullProbe(Probes.R_low_3_mask, FLAG_10MS | FLAG_PULLUP);
-    U_Rl = ReadU_5ms(Probes.Pin_2);       // Get voltage at R low
+    pullProbe(probes.rLow3Mask, FLAG_10MS | FLAG_PULLUP);
+    vRLow = readVoltage5ms(probes.pin2);       // Get voltage at R low
   }
 
 //   If there's some current we could have a depletion-mode FET
@@ -1072,8 +1089,8 @@ void CheckProbes(byte Probe1, byte Probe2, byte Probe3) {
 //   Other possibilities:
 //    - diode or resistor
 
-  if(U_Rl > 490) {                        // > 700µA (was 92mV/130µA)
-    CheckDepletionModeFET(U_Rl);
+  if(vRLow > 490) {                        // > 700µA (was 92mV/130µA)
+    checkDepletionModeFet(vRLow);
   }
 
 //   If there's nearly no conduction (just a small leakage current) between
@@ -1083,25 +1100,26 @@ void CheckProbes(byte Probe1, byte Probe2, byte Probe3) {
 //    - Thyristor or Triac
 //    or a large resistor
 
-  if(U_Rl < 977) {                        // Load current < 1.4mA
+  if(vRLow < 977) {                        // Load current < 1.4mA
 
 //     check for:
 //      - PNP BJT (common emitter circuit)
 //      - p-channel MOSFET (low side switching circuit)
 
-    if(Check.Done == 0) {                 // Not sure yet
-      // We assume: probe-1 = E / probe-2 = C / probe-3 = B, set probes: Gnd -- R low - probe-2 / probe-1 -- Vcc
-      R_DDR = Probes.R_low_2_mask;        // Enable R low for probe-2
+    if(check.done == 0) {                 // Not sure yet
+      // We assume: probe-1 = E / probe-2 = C / probe-3 = B,
+      // set probes: Gnd -- R low - probe-2 / probe-1 -- Vcc
+      R_DDR = probes.rLow2Mask;        // Enable R low for probe-2
       R_PORT = 0;                         // Pull down collector via R low
-      ADC_DDR = Probes.Probe_1_ADC;       // Set probe 1 to output
-      ADC_PORT = Probes.Probe_1_ADC;      // Pull up emitter directly
+      ADC_DDR = probes.probe1Adc;       // Set probe 1 to output
+      ADC_PORT = probes.probe1Adc;      // Pull up emitter directly
       delay(5);
-      R_DDR = Probes.R_low_2_mask | Probes.R_low_3_mask; // Pull down base via R low
-      U_1 = ReadU_5ms(Probe2);            // Get voltage at collector
+      R_DDR = probes.rLow2Mask | probes.rLow3Mask; // Pull down base via R low
+      v1 = readVoltage5ms(probe2);            // Get voltage at collector
       // If DUT is conducting we might have a PNP BJT or p-channel FET.
-      if(U_1 > 3422) {                    // Detected current > 4.8mA
+      if(v1 > 3422) {                    // Detected current > 4.8mA
         // Distinguish PNP BJT from p-channel MOSFET
-        CheckBJTorEnhModeMOSFET(TYPE_PNP, U_Rl);
+        checkBjtMosFet(TYPE_PNP, vRLow);
       }
     }
 
@@ -1110,21 +1128,21 @@ void CheckProbes(byte Probe1, byte Probe2, byte Probe3) {
 //      - Thyristor and Triac
 //      - n-channel MOSFET (high side switching circuit)
 
-    if(Check.Done == 0) {                 // Not sure yet
+    if(check.done == 0) {                 // Not sure yet
       // We assume: probe-1 = C / probe-2 = E / probe-3 = B,
       // set probes: Gnd -- probe-2 / probe-1 -- R low -- Vcc
-      ADC_DDR = Probes.Probe_2_ADC;       // Set probe-2 to output mode
-      SetADCLow();                        // Pull down probe-2 directly
-      R_DDR = Probes.R_low_1_mask | Probes.R_low_3_mask; // Select R low for probe-1 & R low for probe-3
-      R_PORT = Probes.R_low_1_mask | Probes.R_low_3_mask; // Pull up collector & base via R low
-      U_1 = ReadU_5ms(Probe1);            // Get voltage at collector
+      ADC_DDR = probes.probe2Adc;       // Set probe-2 to output mode
+      setAdcLow();                        // Pull down probe-2 directly
+      R_DDR = probes.rLow1Mask | probes.rLow3Mask; // Select R low for probe-1 & R low for probe-3
+      R_PORT = probes.rLow1Mask | probes.rLow3Mask; // Pull up collector & base via R low
+      v1 = readVoltage5ms(probe1);            // Get voltage at collector
       // If DUT is conducting we might have a NPN BJT, something similar or a n-channel MOSFET.
-      if(U_1 < 1600) {                    // Detected current > 4.8mA
+      if(v1 < 1600) {                    // Detected current > 4.8mA
         // First check for thyristor and triac
-        Flag = CheckThyristorTriac();
-        if(Flag == 0) {                   // No thyristor or triac
+        flag = checkThyristorTriac();
+        if(flag == 0) {                   // No thyristor or triac
           // We might got a NPN BJT or a n-channel MOSFET.
-          CheckBJTorEnhModeMOSFET(TYPE_NPN, U_Rl);
+          checkBjtMosFet(TYPE_NPN, vRLow);
         }
       }
     }
@@ -1136,285 +1154,285 @@ void CheckProbes(byte Probe1, byte Probe2, byte Probe3) {
   } else {                                // Load current > 1.4mA
     // We check for a diode even if we already found a component to get Vf,
     // since there could be a body/protection diode of a transistor.
-    CheckDiode();
+    checkDiode();
   }
   // Check for a resistor.
-  if(Check.Found == COMP_NONE || Check.Found == COMP_RESISTOR) {
-    CheckResistor();
+  if(check.found == COMP_NONE || check.found == COMP_RESISTOR) {
+    checkResistor();
   // Otherwise run some final checks.
   } else {
     // Verify a MOSFET
-    if(Check.Found == COMP_FET && Check.Type & TYPE_MOSFET)
-      VerifyMOSFET();
+    if(check.found == COMP_FET && check.type & TYPE_MOSFET)
+      verifyMosFet();
   }
   // Clean up
-  SetADCHiz();                            // Set ADC port to HiZ mode
-  SetADCLow();                            // Set ADC port low
+  setAdcHighZ();                            // Set ADC port to HiZ mode
+  setAdcLow();                            // Set ADC port low
   R_DDR = 0;                              // Set resistor port to HiZ mode
   R_PORT = 0;                             // Set resistor port low
 }
 
 // Read ADC and return voltage in mV
-unsigned int ReadU(byte Probe)
+unsigned int readVoltage(byte Probe, byte scale)
 {
-  unsigned int U;                         // Return value (mV)
+  unsigned int v;                         // Return value (mV)
   byte lc;                                // Loop counter
-  unsigned long int Value;                // ADC value
+  unsigned long int value;                // ADC value
 
-  for(lc = 0, Value = 0; lc < Config.Samples; lc++) {
-    Value += DoReadU(Probe);                      // Add ADC reading
+  for(lc = 0, value = 0; lc < parameters.samples; lc++) {
+    value += doReadV(Probe, scale);              // Add ADC reading
   }
   // De-sample to get average voltage
-  Value /= Config.Samples;
-  U = Value;
-  return U;
+  value /= parameters.samples;
+  v = value;
+  return v;
 }
 
 // Read ADC and return voltage in mV
-unsigned int DoReadU(byte Probe)
+unsigned int doReadV(byte probe, byte scale)
 {
-  unsigned int U;                         // Return value (mV)
+  unsigned int v;                         // Return value (mV)
   byte lc;                                // Loop counter
-  unsigned long int Value;                // ADC value
-  Probe |= (1 << REFS0);                  // Use internal reference anyway
+  unsigned long int value;                // ADC value
+  probe |= (1 << REFS0);                  // Use internal reference anyway
   char i;
   byte saveRef;
 
   for(i = 0; i < 1; i++) {
-    ADMUX = Probe;                        // Set input channel and U reference
+    ADMUX = probe;                        // Set input channel and v reference
 
     // If voltage reference has changed, run a dummy conversion
     // (recommended by datasheet)
 
-    saveRef = Probe & (1 << REFS1);       // Get REFS1 bit flag
-    if(saveRef != Config.RefFlag) {
+    saveRef = probe & (1 << REFS1);       // Get REFS1 bit flag
+    if(saveRef != parameters.refFlag) {
       delayMicroseconds(100);             // Time for voltage stabilization
       ADCSRA |= (1 << ADSC);              // Start conversion
       while (ADCSRA & (1 << ADSC));       // Wait until conversion is done
-      Config.RefFlag = saveRef;           // Update flag
+      parameters.refFlag = saveRef;           // Update flag
     }
     // Sample ADC readings
-    Value = 0;                            // Reset sampling variable
+    value = 0;                            // Reset sampling variable
     ADCSRA |= (1 << ADSC);              // Start conversion
     while (ADCSRA & (1 << ADSC));       // Wait until conversion is done
-    Value += ADCW;                      // Add ADC reading
+    value += ADCW;                      // Add ADC reading
     // Auto-switch voltage reference for low readings
-    if(lc == 4 && Value < 1024 && !(Probe & (1 << REFS1)) && Config.AutoScale == 1) {
-      Probe |= (1 << REFS1);            // Select internal bandgap reference
+    if(lc == 4 && value < 1024 && !(probe & (1 << REFS1)) && scale == 1) {
+      probe |= (1 << REFS1);            // Select internal bandgap reference
       i = -1;                           // Re-run sampling
       break;
     }
   }
-  // Convert ADC reading to voltage - single sample: U = ADC reading * U_ref / 1024
+  // Convert ADC reading to voltage - single sample: v = ADC reading * vRef / 1024
   // Get voltage of reference used
-  if(Probe & (1 << REFS1)) U = Config.U_Bandgap; // Bandgap reference
-  else U = UREF_VCC;                      // Vcc reference
+  if(probe & (1 << REFS1)) v = parameters.vBandgap; // Bandgap reference
+  else v = VREF_VCC;                      // Vcc reference
   // Convert to voltage
-  Value *= U;                             // ADC readings * U_ref
-  Value /= 1024;                          // / 1024 for 10bit ADC
-  U = Value;
-  return U;
+  value *= v;                             // ADC readings * vRef
+  value /= 1024;                          // / 1024 for 10bit ADC
+  v = value;
+  return v;
 }
 
 // Wait 5ms and then read ADC
-unsigned int ReadU_5ms(byte Probe) {
+unsigned int readVoltage5ms(byte Probe) {
    delay(5);                              // Wait 5ms
-   return (ReadU(Probe));
+   return (readVoltage(Probe, 1));
 }
 
 // Wait 20ms and then read ADC
-unsigned int ReadU_20ms(byte Probe) {
+unsigned int readVoltage20ms(byte Probe) {
   delay(20);                              // Wait 20ms
-  return (ReadU(Probe));
+  return (readVoltage(Probe, 1));
 }
 
 // Measure hFE of BJT in common collector circuit (emitter follower)
-unsigned long Get_hFE_C(byte Type) {
-  unsigned long hFE;                      // Return value
-  unsigned int U_R_e;                     // Voltage across emitter resistor
-  unsigned int U_R_b;                     // Voltage across base resistor
-  unsigned int Ri;                        // Internal resistance of µC
+unsigned long getHFeCommonCollector(byte type) {
+  unsigned long hFe;                      // Return value
+  unsigned int vREmitter;                     // Voltage across emitter resistor
+  unsigned int vRBase;                     // Voltage across base resistor
+  unsigned int rInternal;                        // Internal resistance of µC
 
 //   Measure hFE for a BJT in common collector circuit
 //   (emitter follower):
 //    - hFE = (I_e - I_b) / I_b
 //    - measure the voltages across the resistors and calculate the currents
 //      (resistor values are well known)
-//    - hFE = ((U_R_e / R_e) - (U_R_b / R_b)) / (U_R_b / R_b)
+//    - hFE = ((vREmitter / rEmitter) - (vRBase / rBase)) / (vRBase / rBase)
 
   // Setup probes and get voltages
-  if(Type == TYPE_NPN) {                  // NPN
+  if(type == TYPE_NPN) {                  // NPN
     // We assume: probe-1 = C / probe-2 = E / probe-3 = B,
-    // set probes: Gnd -- Rl -- probe-2 / probe-1 -- Vcc
-    ADC_DDR = Probes.Probe_1_ADC;         // Set probe 1 to output
-    ADC_PORT = Probes.Probe_1_ADC;        // Pull up collector directly
-    R_DDR = Probes.R_low_2_mask | Probes.R_low_3_mask; // Select Rl for probe-2 & Rl for probe-3
-    R_PORT = Probes.R_low_3_mask;         // Pull up base via Rl
-    U_R_e = ReadU_5ms(Probes.Pin_2);      // U_R_e = U_e
-    U_R_b = UREF_VCC - ReadU(Probes.Pin_3); // U_R_b = Vcc - U_b
+    // set probes: Gnd -- rLow -- probe-2 / probe-1 -- Vcc
+    ADC_DDR = probes.probe1Adc;         // Set probe 1 to output
+    ADC_PORT = probes.probe1Adc;        // Pull up collector directly
+    R_DDR = probes.rLow2Mask | probes.rLow3Mask; // Select rLow for probe-2 & rLow for probe-3
+    R_PORT = probes.rLow3Mask;         // Pull up base via rLow
+    vREmitter = readVoltage5ms(probes.pin2);      // vREmitter = ve
+    vRBase = VREF_VCC - readVoltage(probes.pin3, 1); // vRBase = Vcc - vb
   } else {                                // PNP
     // We assume: probe-1 = E / probe-2 = C / probe-3 = B,
-    // set probes: Gnd -- probe-2 / probe-1 -- Rl -- Vcc
-    SetADCLow();                          // Set ADC port low
-    ADC_DDR = Probes.Probe_2_ADC;         // Pull down collector directly
-    R_PORT = Probes.R_low_1_mask;         // Pull up emitter via Rl
-    R_DDR = Probes.R_low_1_mask | Probes.R_low_3_mask; // Pull down base via Rl
-    U_R_e = UREF_VCC - ReadU_5ms(Probes.Pin_1); // U_R_e = Vcc - U_e
-    U_R_b = ReadU(Probes.Pin_3);          // U_R_b = U_b
+    // set probes: Gnd -- probe-2 / probe-1 -- rLow -- Vcc
+    setAdcLow();                          // Set ADC port low
+    ADC_DDR = probes.probe2Adc;         // Pull down collector directly
+    R_PORT = probes.rLow1Mask;         // Pull up emitter via rLow
+    R_DDR = probes.rLow1Mask | probes.rLow3Mask; // Pull down base via rLow
+    vREmitter = VREF_VCC - readVoltage5ms(probes.pin1); // vREmitter = Vcc - ve
+    vRBase = readVoltage(probes.pin3, 1);       // vRBase = vb
   }
-  if(U_R_b < 10) {                        // I_b < 14µA -> Darlington
-    // Change base resistor from Rl to Rh and measure again
-    if(Type == TYPE_NPN) {                // NPN
-      R_DDR = Probes.R_low_2_mask | Probes.R_high_3_mask; // Select Rl for probe-2 & Rh for probe-3
-      R_PORT = Probes.R_high_3_mask;      // Pull up base via Rh
-      U_R_e = ReadU_5ms(Probes.Pin_2);    // U_R_e = U_e
-      U_R_b = UREF_VCC - ReadU(Probes.Pin_3); // U_R_b = Vcc - U_b
-      Ri = Config.RiL;                    // Get internal resistor
+  if(vRBase < 10) {                        // I_b < 14µA -> Darlington
+    // Change base resistor from rLow to rHigh and measure again
+    if(type == TYPE_NPN) {                // NPN
+      R_DDR = probes.rLow2Mask | probes.rHigh3Mask; // Select rLow for probe-2 & rHigh for probe-3
+      R_PORT = probes.rHigh3Mask;      // Pull up base via rHigh
+      vREmitter = readVoltage5ms(probes.pin2);    // vREmitter = ve
+      vRBase = VREF_VCC - readVoltage(probes.pin3, 1); // vRBase = Vcc - vb
+      rInternal = parameters.rIntLow;                    // Get internal resistor
     } else {                              // PNP
-      R_DDR = Probes.R_low_1_mask | Probes.R_high_3_mask; // Pull down base via Rh
-      U_R_e = UREF_VCC - ReadU_5ms(Probes.Pin_1);// U_R_e = Vcc - U_e
-      U_R_b = ReadU(Probes.Pin_3);        // U_R_b = U_b
-      Ri = Config.RiH;                    // Get internal resistor
+      R_DDR = probes.rLow1Mask | probes.rHigh3Mask; // Pull down base via rHigh
+      vREmitter = VREF_VCC - readVoltage5ms(probes.pin1); // vREmitter = Vcc - ve
+      vRBase = readVoltage(probes.pin3, 1);     // vRBase = vb
+      rInternal = parameters.rIntHigh;                    // Get internal resistor
     }
 
 //     Since I_b is so small vs. I_e we'll neglect it and use
 //      hFE = I_e / I_b
-//          = (U_R_e / R_e) / (U_R_b / R_b)
-//          = (U_R_e * R_b) / (U_R_b * R_e)
+//          = (vREmitter / rEmitter) / (vRBase / rBase)
+//          = (vREmitter * rBase) / (vRBase * rEmitter)
 
-    if(U_R_b < 1) U_R_b = 1;              // Prevent division by zero
-    hFE =  U_R_e * R_HIGH;                // U_R_e * R_b
-    hFE /= U_R_b;                         // / U_R_b
-    hFE *= 10;                            // Upscale to 0.1
-    hFE /= (R_LOW * 10) + Ri;             // / R_e in 0.1 Ohm
+    if(vRBase < 1) vRBase = 1;              // Prevent division by zero
+    hFe =  vREmitter * R_HIGH;                // vREmitter * rBase
+    hFe /= vRBase;                         // / vRBase
+    hFe *= 10;                            // Upscale to 0.1
+    hFe /= (R_LOW * 10) + rInternal;             // / rEmitter in 0.1 Ohm
   } else {                                // I_b > 14µA -> standard
 
-//     Both resistors are the same (R_e = R_b):
-//      - hFE = ((U_R_e / R_e) - (U_R_b / R_b)) / (U_R_b / R_b)
-//      -     = (U_R_e - U_R_b) / U_R_b
+//     Both resistors are the same (rEmitter = rBase):
+//      - hFE = ((vREmitter / rEmitter) - (vRBase / rBase)) / (vRBase / rBase)
+//      -     = (vREmitter - vRBase) / vRBase
 
-    hFE = (U_R_e - U_R_b) / U_R_b;
+    hFe = (vREmitter - vRBase) / vRBase;
   }
-  return hFE;
+  return hFe;
 }
 
 // Measure the gate threshold voltage of a depletion-mode MOSFET
-void GetGateThreshold(byte Type) {
-  unsigned long Uth = 0;                  // Gate threshold voltage
-  byte Drain_Rl;                          // Rl bitmask for drain
-  byte Drain_ADC;                         // ADC bitmask for drain
-  byte PullMode;
+void getGateThreshold(byte type) {
+  unsigned long vTh = 0;                  // Gate threshold voltage
+  byte drainRLow;                          // rLow bitmask for drain
+  byte drainAdc;                         // ADC bitmask for drain
+  byte pullMode;
   byte lc;                                // Loop counter
 
    // Init variables
-  if(Type & TYPE_N_CHANNEL) {             // N-channel
+  if(type & TYPE_N_CHANNEL) {             // N-channel
 
 //    We assume: probe-1 = D / probe-2 = S / probe-3 = G
 //     probe-2 is still pulled down directly
-//     probe-1 is still pulled up via Rl
+//     probe-1 is still pulled up via rLow
 
-    Drain_Rl =  Probes.R_low_1_mask;
-    Drain_ADC = Probes.Probe_1_ADC;
-    PullMode = FLAG_10MS | FLAG_PULLDOWN;
+    drainRLow =  probes.rLow1Mask;
+    drainAdc = probes.probe1Adc;
+    pullMode = FLAG_10MS | FLAG_PULLDOWN;
   } else {                                // P-channel
 
 //   We assume: probe-1 = S / probe-2 = D / probe-3 = G
-//    probe-2 is still pulled down via Rl
+//    probe-2 is still pulled down via rLow
 //    probe-1 is still pulled up directly
 
-    Drain_Rl =  Probes.R_low_2_mask;
-    Drain_ADC = Probes.Probe_2_ADC;
-    PullMode = FLAG_10MS | FLAG_PULLUP;
+    drainRLow =  probes.rLow2Mask;
+    drainAdc = probes.probe2Adc;
+    pullMode = FLAG_10MS | FLAG_PULLUP;
   }
   // For low reaction times we use the ADC directly.
   // Sanitize bit mask for drain to prevent a never-ending loop
-  Drain_ADC &= B00000111;                 // drain
-  ADMUX = Probes.Pin_3 | (1 << REFS0);    // Select probe-3 for ADC input
+  drainAdc &= B00000111;                 // drain
+  ADMUX = probes.pin3 | (1 << REFS0);    // Select probe-3 for ADC input
   // Sample 10 times
   for (lc = 0; lc < 10; lc++) {
     wdt_reset();                          // Reset watchdog
-    // Discharge gate via Rl for 10 ms
-    PullProbe(Probes.R_low_3_mask, PullMode);
-    // Pull up/down gate via Rh to slowly charge gate
-    R_DDR = Drain_Rl | Probes.R_high_3_mask;
+    // Discharge gate via rLow for 10 ms
+    pullProbe(probes.rLow3Mask, pullMode);
+    // Pull up/down gate via rHigh to slowly charge gate
+    R_DDR = drainRLow | probes.rHigh3Mask;
     // Wait until FET conducts
-    if(Type & TYPE_N_CHANNEL) {           // N-channel
+    if(type & TYPE_N_CHANNEL) {           // N-channel
       // FET conducts when the voltage at drain reaches low level
-      while (ADC_PIN & Drain_ADC);
+      while (ADC_PIN & drainAdc);
     } else {                              // P-channel
       // FET conducts when the voltage at drain reaches high level
-      while (!(ADC_PIN & Drain_ADC));
+      while (!(ADC_PIN & drainAdc));
     }
-    R_DDR = Drain_Rl;                     // Set probe-3 to HiZ mode
+    R_DDR = drainRLow;                     // Set probe-3 to HiZ mode
     // Get voltage of gate
     ADCSRA |= (1 << ADSC);                // Start ADC conversion
     while (ADCSRA & (1 << ADSC));         // Wait until conversion is done
     // Add ADC reading
-    if(Type & TYPE_N_CHANNEL) {           // N-channel
-      Uth += ADCW;                        // U_g = U_measued
+    if(type & TYPE_N_CHANNEL) {           // N-channel
+      vTh += ADCW;                        // vGate = vmeasured
     } else {                              // P-channel
-      Uth += (1023 - ADCW);               // U_g = Vcc - U_measured
+      vTh += (1023 - ADCW);               // vGate = Vcc - vmeasured
     }
   }
-  // Calculate V_th
-  Uth /= 10;                              // Average of 10 samples
-  Uth *= UREF_VCC;                        // Convert to voltage
-  Uth /= 1024;                            // Using 10 bit resolution
+  // Calculate vTh
+  vTh /= 10;                              // Average of 10 samples
+  vTh *= VREF_VCC;                        // Convert to voltage
+  vTh /= 1024;                            // Using 10 bit resolution
   // Save data
-  FET.V_th = (unsigned int)Uth;
+  fet.vTh = (unsigned int) vTh;
 }
 
 // Measure leakage current
-unsigned int GetLeakageCurrent(void) {
-  unsigned int I_leak = 0;                // Return value
-  unsigned int U_Rl;                      // Voltage at Rl
-  unsigned int R_Shunt;                   // Shunt resistor
-  uint32_t Value;
+unsigned int getLeakageCurrent(void) {
+  unsigned int iLeak = 0;                // Return value
+  unsigned int vRLow;                      // Voltage at rLow
+  unsigned int rShunt;                   // Shunt resistor
+  uint32_t value;
 
 //   Setup probes:
-//    - use Rl as current shunt
+//    - use rLow as current shunt
 //    - probe-1 = pos / probe-2 = neg / probe-3 = HiZ
 //      Diode:    probe-1 = cathode /  probe-2 = anode
 //      NPN BJT:  probe-1 = collector / probe-2 = emitter
 //      PNP BJT:  probe-1 = emitter / probe-2 = collector
 
   R_PORT = 0;                             // Set resistor port to Gnd
-  R_DDR = Probes.R_low_2_mask;            // Pull down probe-2 via R low
-  ADC_DDR = Probes.Probe_1_ADC;           // Set probe-1 to output
-  ADC_PORT = Probes.Probe_1_ADC;          // Pull-up probe-1 directly
-  U_Rl = ReadU_5ms(Probes.Pin_2);         // Get voltage at R low
+  R_DDR = probes.rLow2Mask;            // Pull down probe-2 via R low
+  ADC_DDR = probes.probe1Adc;           // Set probe-1 to output
+  ADC_PORT = probes.probe1Adc;          // Pull-up probe-1 directly
+  vRLow = readVoltage5ms(probes.pin2);         // Get voltage at R low
 
   // Calculate current
-  R_Shunt = Config.RiL + (R_LOW * 10);    // Consider internal resistance of MCU (0.1 Ohms)
-  R_Shunt += 5;                           // For rounding
-  R_Shunt /= 10;                          // Scale to Ohms
-  Value = U_Rl * 100000;                  // Scale to 10nV
-  Value /= R_Shunt;                       // in 10nA
-  Value += 55;                            // For rounding
-  Value /= 100;                           // Scale to µA
-  I_leak = Value;
+  rShunt = parameters.rIntLow + (R_LOW * 10);    // Consider internal resistance of MCU (0.1 Ohms)
+  rShunt += 5;                           // For rounding
+  rShunt /= 10;                          // Scale to Ohms
+  value = vRLow * 100000;                  // Scale to 10nV
+  value /= rShunt;                       // in 10nA
+  value += 55;                            // For rounding
+  value /= 100;                           // Scale to µA
+  iLeak = value;
 
   // Clean up
-  SetADCHiz();                            // Set ADC port to HiZ mode
-  SetADCLow();                            // Set ADC port low
+  setAdcHighZ();                            // Set ADC port to HiZ mode
+  setAdcLow();                            // Set ADC port low
   R_DDR = 0;                              // Set resistor port to HiZ mode
   R_PORT = 0;                             // Set resistor port low
-  return I_leak;
+  return iLeak;
 }
 
 // Check for diode
-void CheckDiode(void) {
-  Diode_Type *Diode;                      // Pointer to diode
-  unsigned int U1_Rl;                     // Vf #1 with Rl pull-up
-  unsigned int U1_Rh;                     // Vf #1 with Rh pull-up
-  unsigned int U1_Zero;                   // Vf #1 zero
-  unsigned int U2_Rl;                     // Vf #2 with Rl pull-up
-  unsigned int U2_Rh;                     // Vf #2 with Rh pull-up
-  unsigned int U2_Zero;                   // Vf #2 zero
+void checkDiode(void) {
+  Diodes *diode;                      // Pointer to diode
+  unsigned int v1RLow;                     // Vf #1 with rLow pull-up
+  unsigned int v1RHigh;                     // Vf #1 with rHigh pull-up
+  unsigned int v1Zero;                   // Vf #1 zero
+  unsigned int v2RLow;                     // Vf #2 with rLow pull-up
+  unsigned int v2RHigh;                     // Vf #2 with rHigh pull-up
+  unsigned int v2Zero;                   // Vf #2 zero
 
   wdt_reset();                            // Reset watchdog
-  DischargeProbes();                      // Try to discharge probes
-  if(Check.Found == COMP_ERROR) return;  // Skip on error
+  dischargeProbes();                      // Try to discharge probes
+  if(check.found == COMP_ERROR) return;   // Skip on error
 
 //   DUT could be:
 //    - simple diode
@@ -1432,229 +1450,229 @@ void CheckDiode(void) {
 //      So we discharge the gate and run the measurements twice for p and n
 //      channel FETs.
 //    - Take care about the internal voltage drop of the µC at the cathode
-//      for high test currents (Rl).
+//      for high test currents (rLow).
 //    - Filter out resistors by the used voltage divider:
-//      k = Rl + Ri_H + Ri_L
-//      U_Rh = U_Rl / (k - (k - 1) U_Rl / 5V)
-//      U_Rl = k U_Rh / (1 + (k - 1) U_Rh / 5V)
+//      k = rLow + rIntHigh + rIntlow
+//      vRHigh = vRLow / (k - (k - 1) vRLow / 5V)
+//      vRLow = k vRHigh / (1 + (k - 1) vRHigh / 5V)
 //    - Filter out caps by checking the voltage before and after measurement
-//      with Rh. In 15ms a 22µF cap would be charged from 0 to 7mV, a larger
+//      with rHigh. In 15ms a 22µF cap would be charged from 0 to 7mV, a larger
 //      cap would have a lower voltage. We have to consider that caps also
 //      might be charged by EMI.
 // 
 //    Hints:
-//    - Rl drives a current of about 7mA. That's not the best current for
-//      measuring Vf. The current for Rh is about 10.6µA.
+//    - rLow drives a current of about 7mA. That's not the best current for
+//      measuring Vf. The current for rHigh is about 10.6µA.
 //      Most DMMs use 1mA.
 
   // Vf #1, supporting a possible P-channel MOSFET
   // We assume: probe-1 = A / probe2 = C,
-  // set probes: Gnd -- probe-2 / probe-1 -- Rl or Rh -- Vcc
-  SetADCLow();
-  ADC_DDR = Probes.Probe_2_ADC;           // Pull down cathode directly
+  // set probes: Gnd -- probe-2 / probe-1 -- rLow or rHigh -- Vcc
+  setAdcLow();
+  ADC_DDR = probes.probe2Adc;           // Pull down cathode directly
 
-  // R_DDR is set to HiZ by DischargeProbes();
-  U1_Zero = ReadU(Probes.Pin_1);          // Get voltage at anode
+  // R_DDR is set to HiZ by dischargeProbes();
+  v1Zero = readVoltage(probes.pin1, 1);       // Get voltage at anode
 
-  // Measure voltage across DUT (Vf) with Rh
-  R_DDR = Probes.R_high_1_mask;           // Enable Rh for probe-1
-  R_PORT = Probes.R_high_1_mask;          // Pull up anode via Rh
-
-  // Discharge gate
-  PullProbe(Probes.R_low_3_mask, FLAG_10MS | FLAG_PULLUP);
-  U1_Rh = ReadU_5ms(Probes.Pin_1);        // Get voltage at anode, ignore voltage at cathode
-
-  // Measure voltage across DUT (Vf) with Rl
-  R_DDR = Probes.R_low_1_mask;            // Enable Rl for probe-1
-  R_PORT = Probes.R_low_1_mask;           // Pull up anode via Rl
+  // Measure voltage across DUT (Vf) with rHigh
+  R_DDR = probes.rHigh1Mask;           // Enable rHigh for probe-1
+  R_PORT = probes.rHigh1Mask;          // Pull up anode via rHigh
 
   // Discharge gate
-  PullProbe(Probes.R_low_3_mask, FLAG_10MS | FLAG_PULLUP);
-  U1_Rl = ReadU_5ms(Probes.Pin_1);        // Get voltage at anode
-  U1_Rl -= ReadU(Probes.Pin_2);           // Substract voltage at cathode
-  DischargeProbes();                      // Try to discharge probes
-  if(Check.Found == COMP_ERROR) return;   // Skip on error
+  pullProbe(probes.rLow3Mask, FLAG_10MS | FLAG_PULLUP);
+  v1RHigh = readVoltage5ms(probes.pin1);        // Get voltage at anode, ignore voltage at cathode
+
+  // Measure voltage across DUT (Vf) with rLow
+  R_DDR = probes.rLow1Mask;            // Enable rLow for probe-1
+  R_PORT = probes.rLow1Mask;           // Pull up anode via rLow
+
+  // Discharge gate
+  pullProbe(probes.rLow3Mask, FLAG_10MS | FLAG_PULLUP);
+  v1RLow = readVoltage5ms(probes.pin1);        // Get voltage at anode
+  v1RLow -= readVoltage(probes.pin2, 1);        // Substract voltage at cathode
+  dischargeProbes();                      // Try to discharge probes
+  if(check.found == COMP_ERROR) return;   // Skip on error
 
   // Vf #2, supporting a possible N-channel MOSFET
   // We assume: probe-1 = A / probe2 = C,
-  // set probes: Gnd -- probe-2 / probe-1 -- Rl or Rh -- Vcc
-  SetADCLow();
-  ADC_DDR = Probes.Probe_2_ADC;           // Pull down cathode directly
-  U2_Zero = ReadU(Probes.Pin_1);          // Get voltage at anode
+  // set probes: Gnd -- probe-2 / probe-1 -- rLow or rHigh -- Vcc
+  setAdcLow();
+  ADC_DDR = probes.probe2Adc;           // Pull down cathode directly
+  v2Zero = readVoltage(probes.pin1, 1);       // Get voltage at anode
 
-  // Measure voltage across DUT (Vf) with Rh
-  R_DDR = Probes.R_high_1_mask;           // Enable Rh for probe-1
-  R_PORT = Probes.R_high_1_mask;          // Pull up anode via Rh
-
-  // Discharge gate
-  PullProbe(Probes.R_low_3_mask, FLAG_10MS | FLAG_PULLDOWN);
-  U2_Rh = ReadU_5ms(Probes.Pin_1);        // Get voltage at anode, ignore voltage at cathode
-
-  // Measure voltage across DUT (Vf) with Rl
-  R_DDR = Probes.R_low_1_mask;            // Enable Rl for probe-1
-  R_PORT = Probes.R_low_1_mask;           // Pull up anode via Rl
+  // Measure voltage across DUT (Vf) with rHigh
+  R_DDR = probes.rHigh1Mask;           // Enable rHigh for probe-1
+  R_PORT = probes.rHigh1Mask;          // Pull up anode via rHigh
 
   // Discharge gate
-  PullProbe(Probes.R_low_3_mask, FLAG_10MS | FLAG_PULLDOWN);
-  U2_Rl = ReadU_5ms(Probes.Pin_1);        // Get voltage at anode
-  U2_Rl -= ReadU(Probes.Pin_2);           // Substract voltage at cathode
+  pullProbe(probes.rLow3Mask, FLAG_10MS | FLAG_PULLDOWN);
+  v2RHigh = readVoltage5ms(probes.pin1);        // Get voltage at anode, ignore voltage at cathode
+
+  // Measure voltage across DUT (Vf) with rLow
+  R_DDR = probes.rLow1Mask;            // Enable rLow for probe-1
+  R_PORT = probes.rLow1Mask;           // Pull up anode via rLow
+
+  // Discharge gate
+  pullProbe(probes.rLow3Mask, FLAG_10MS | FLAG_PULLDOWN);
+  v2RLow = readVoltage5ms(probes.pin1);        // Get voltage at anode
+  v2RLow -= readVoltage(probes.pin2, 1);        // Substract voltage at cathode
   R_PORT = 0;                             // Stop pulling up
 
   // Process results, choose between measurements of p and n channel setup
-  if(U1_Rl > U2_Rl) {                     // The higher voltage wins
-    U2_Rl = U1_Rl;
-    U2_Rh = U1_Rh;
-    U2_Zero = U1_Zero;
+  if(v1RLow > v2RLow) {                     // The higher voltage wins
+    v2RLow = v1RLow;
+    v2RHigh = v1RHigh;
+    v2Zero = v1Zero;
   }
 
-//   U_Rh < 10mV for
+//   vRHigh < 10mV for
 //    - resistor < 1k Ohm
 //    - very large cap
 
-  if(U2_Rh <= 10) return;                 // Small resistor or very large cap
+  if(v2RHigh <= 10) return;                 // Small resistor or very large cap
 
-//   U_Zero <= 2 for resistor or diode
-//   U_Zero > 2 for cap or diode
-//   if U_Zero > 2 then U_Rh - U_Zero < 100 for cap
+//   vZero <= 2 for resistor or diode
+//   vZero > 2 for cap or diode
+//   if vZero > 2 then vRHigh - vZero < 100 for cap
 // 
 //   Hints:
-//    If U_Zero > 10 and U_Rh is about U_Zero it's a large cap.
-//    As larger the cap as lower U_Rl (charging time 15ms).
+//    If vZero > 10 and vRHigh is about vZero it's a large cap.
+//    As larger the cap as lower vRLow (charging time 15ms).
 
-  U1_Zero = U2_Rh - U2_Zero;              // Voltage difference
-  if((U2_Zero > 2) && (U1_Zero < 100)) return; // Capacitor
+  v1Zero = v2RHigh - v2Zero;              // Voltage difference
+  if((v2Zero > 2) && (v1Zero < 100)) return; // Capacitor
 
 //   The voltages for a resistor will follow the equation:
-//     k = Rl + Ri_H + Ri_L
-//     Ul = k U_Rh / (1 + (k - 1) U_Rh / 5V)
+//     k = rLow + rIntHigh + rIntlow
+//     vl = k vRHigh / (1 + (k - 1) vRHigh / 5V)
 //   Allow a tolerance of 3%.
-//   For U_Rh > 40mV we don't need to check for a resistor.
+//   For vRHigh > 40mV we don't need to check for a resistor.
 // 
 //   Hint:
 //    Actually we could change the thresshold above from 10 t0 40 and
-//    remove this test completely. The lowest U_Rh measured for a diode was
+//    remove this test completely. The lowest vRHigh measured for a diode was
 //    56mV for a AA118.
 
-  if(U2_Rh < 40) {                        // Resistor (< 3k)
+  if(v2RHigh < 40) {                        // Resistor (< 3k)
     uint32_t a, b;
 
-    // Calculate expected U_Rl based on measured U_Rh in mV, k factor
-    b = (R_HIGH * 10) / ((R_LOW * 10) + Config.RiH + Config.RiL);
+    // Calculate expected vRLow based on measured vRHigh in mV, k factor
+    b = (R_HIGH * 10) / ((R_LOW * 10) + parameters.rIntHigh + parameters.rIntLow);
     a = b - 1;                            // k - 1
     a /= 5;                               // / 5V
-    a *= U2_Rh;                           // *U_Rh
+    a *= v2RHigh;                           // *vRHigh
     a += 1000;                            // +1 (1000 for mV)
     b *= 1000;                            // For mV
-    b *= U2_Rh;                           // *U_Rh
-    b /= a;                               // U_Rl in mV
+    b *= v2RHigh;                           // *vRHigh
+    b /= a;                               // vRLow in mV
 
-    // Check if calculated U_Rl is within some % of measured value
-    U1_Zero = b;
-    U1_Rl = U1_Zero;
-    U1_Rh = U1_Zero;
-    U1_Zero /= 50;                        // 2%
-    U1_Rh += U1_Zero;                     // 102%
-    U1_Zero = b;
-    U1_Zero /= 33;                        // 3%
-    U1_Rl -= U1_Zero;                     // 97% (for resistors near 1k)
+    // Check if calculated vRLow is within some % of measured value
+    v1Zero = b;
+    v1RLow = v1Zero;
+    v1RHigh = v1Zero;
+    v1Zero /= 50;                        // 2%
+    v1RHigh += v1Zero;                     // 102%
+    v1Zero = b;
+    v1Zero /= 33;                        // 3%
+    v1RLow -= v1Zero;                     // 97% (for resistors near 1k)
     // Resistor
-    if((U2_Rl >= U1_Rl) && (U2_Rl <= U1_Rh)) return;
+    if((v2RLow >= v1RLow) && (v2RLow <= v1RHigh)) return;
   }
-  // If U_Rl (Vf) is between 0.15V and 4.64V it's a diode
-  if((U2_Rl > 150) && (U2_Rl < 4640)) {
+  // If vRLow (Vf) is between 0.15V and 4.64V it's a diode
+  if((v2RLow > 150) && (v2RLow < 4640)) {
     // If we haven't found any other component yet
-    if(Check.Found == COMP_NONE || Check.Found == COMP_RESISTOR) {
-      Check.Found = COMP_DIODE;
+    if(check.found == COMP_NONE || check.found == COMP_RESISTOR) {
+      check.found = COMP_DIODE;
     }
     // Save data
-    Diode = &Diodes[Check.Diodes];
-    Diode->A = Probes.Pin_1;
-    Diode->C = Probes.Pin_2;
-    Diode->V_f = U2_Rl;                   // Vf for high measurement current
-    Diode->V_f2 = U2_Rh;                  // Vf for low measurement current
-    Check.Diodes++;
+    diode = &diodes[check.diodes];
+    diode->a = probes.pin1;
+    diode->c = probes.pin2;
+    diode->vF = v2RLow;                   // Vf for high measurement current
+    diode->vF2 = v2RHigh;                  // Vf for low measurement current
+    check.diodes++;
   }
 }
 
 // Verify MOSFET by checking the body diode
-void VerifyMOSFET(void) {
-  byte Flag = 0;
+void verifyMosFet(void) {
+  byte flag = 0;
   byte n = 0;
-  byte Anode;
-  byte Cathode;
-  Diode_Type *Diode;                      // Pointer to diode
+  byte anode;
+  byte cathode;
+  Diodes *diode;                      // Pointer to diode
   // Set expected body diode
-  if(Check.Type & TYPE_N_CHANNEL) {       // N-channel
-    Anode = FET.S;
-    Cathode = FET.D;
+  if(check.type & TYPE_N_CHANNEL) {       // N-channel
+    anode = fet.s;
+    cathode = fet.d;
   } else {                                // P-channel
-    Anode = FET.D;
-    Cathode = FET.S;
+    anode = fet.d;
+    cathode = fet.s;
   }
-  Diode = &Diodes[0];                     // First diode
+  diode = &diodes[0];                     // First diode
   // Check all known diodes for reversed one
-  while(n < Check.Diodes) {
-    if((Diode->A == Cathode) && (Diode->C == Anode)) {
-      Flag = 1;                           // Signal match
+  while(n < check.diodes) {
+    if((diode->a == cathode) && (diode->c == anode)) {
+      flag = 1;                           // Signal match
       n = 10;                             // End loop
     }
     n++;                                  // Next diode
-    Diode++;
+    diode++;
   }
-  if(Flag == 1) {                         // Found reversed diode
+  if(flag == 1) {                         // Found reversed diode
     // This can't be a MOSFET, so let's reset
-    Check.Found = COMP_NONE;
-    Check.Type = 0;
-    Check.Done = 0;
+    check.found = COMP_NONE;
+    check.type = 0;
+    check.done = 0;
   }
 }
 
 // Check for BJT or enhancement-mode MOSFET
-void CheckBJTorEnhModeMOSFET(byte BJT_Type, unsigned int U_Rl) {
-  byte FET_Type;                          // MOSFET type
-  unsigned int U_R_c;                     // Voltage across collector resistor
-  unsigned int U_R_b;                     // Voltage across base resistor
-  unsigned int BJT_Level;                 // Voltage threshold for BJT
-  unsigned int FET_Level;                 // Voltage threshold for FET
-  unsigned int I_CE0;                     // Leakage current
-  unsigned long hFE_C;                    // hFE (common collector)
-  unsigned long hFE_E;                    // hFE (common emitter)
+void checkBjtMosFet(byte bjtType, unsigned int vRLow) {
+  byte fetType;                          // MOSFET type
+  unsigned int vRCollector;                     // Voltage across collector resistor
+  unsigned int vRBase;                     // Voltage across base resistor
+  unsigned int bjtLevel;                 // Voltage threshold for BJT
+  unsigned int fetLevel;                 // Voltage threshold for FET
+  unsigned int iCeo;                     // Leakage current
+  unsigned long hFeCommonCollector;                    // hFE (common collector)
+  unsigned long hFeCommonEmitter;                    // hFE (common emitter)
   // Init, set probes and measure
-  if(BJT_Type == TYPE_NPN) {              // NPN / n-channel
-    BJT_Level = 2557;                     // Voltage across base resistor (5.44µA)
-    FET_Level = 3400;                     // Voltage across drain resistor (4.8mA)
-    FET_Type = TYPE_N_CHANNEL;
+  if(bjtType == TYPE_NPN) {              // NPN / n-channel
+    bjtLevel = 2557;                     // Voltage across base resistor (5.44µA)
+    fetLevel = 3400;                     // Voltage across drain resistor (4.8mA)
+    fetType = TYPE_N_CHANNEL;
 
 //     We assume
 //      - BJT: probe-1 = C / probe-2 = E / probe-3 = B
 //      - FET: probe-1 = D / probe-2 = S / probe-3 = G
-//      probes already set to: Gnd -- probe-2 / probe-1 -- Rl -- Vcc
-//      drive base/gate via Rh instead of Rl
+//      probes already set to: Gnd -- probe-2 / probe-1 -- rLow -- Vcc
+//      drive base/gate via rHigh instead of rLow
 
-    R_DDR = Probes.R_low_1_mask | Probes.R_high_3_mask; // Enable Rl for probe-1 & Rh for probe-3
-    R_PORT = Probes.R_low_1_mask | Probes.R_high_3_mask; // Pull up collector via Rl and base via Rh
+    R_DDR = probes.rLow1Mask | probes.rHigh3Mask; // Enable rLow for probe-1 & rHigh for probe-3
+    R_PORT = probes.rLow1Mask | probes.rHigh3Mask; // Pull up collector via rLow and base via rHigh
     delay(50);                            // Wait to skip gate charging of a FET
-    U_R_c = UREF_VCC - ReadU(Probes.Pin_1);      // U_R_c = Vcc - U_c
-    U_R_b = UREF_VCC - ReadU(Probes.Pin_3);      // U_R_b = Vcc - U_b
+    vRCollector = VREF_VCC - readVoltage(probes.pin1, 1); // vRCollector = Vcc - vNow
+    vRBase = VREF_VCC - readVoltage(probes.pin3, 1); // vRBase = Vcc - vb
   } else {                                // PNP / P-channel
-    BJT_Level = 977;                      // Voltage across base resistor (2.1µA)
-    FET_Level = 2000;                     // Voltage across drain resistor (2.8mA)
-    FET_Type = TYPE_P_CHANNEL;
+    bjtLevel = 977;                      // Voltage across base resistor (2.1µA)
+    fetLevel = 2000;                     // Voltage across drain resistor (2.8mA)
+    fetType = TYPE_P_CHANNEL;
 
 //     We assume
 //      - BJT: probe-1 = E / probe-2 = C / probe-3 = B
 //      - FET: probe-1 = S / probe-2 = D / probe-3 = G
-//      probes already set to: Gnd -- Rl - probe-2 / probe-1 -- Vcc
-//      drive base/gate via Rh instead of Rl
+//      probes already set to: Gnd -- rLow - probe-2 / probe-1 -- Vcc
+//      drive base/gate via rHigh instead of rLow
 
-    R_DDR = Probes.R_low_2_mask | Probes.R_high_3_mask; // Pull down base via Rh
-    U_R_c = ReadU_5ms(Probes.Pin_2);      // U_R_c = U_c
-    U_R_b = ReadU(Probes.Pin_3);          // U_R_b = U_b
+    R_DDR = probes.rLow2Mask | probes.rHigh3Mask; // Pull down base via rHigh
+    vRCollector = readVoltage5ms(probes.pin2);      // vRCollector = vNow
+    vRBase = readVoltage(probes.pin3, 1);       // vRBase = vb
   }
   // Distinguish BJT from depletion-mode MOSFET
-  if(U_R_b > BJT_Level) {                 // U_R_b exceeds minimum level of BJT
+  if(vRBase > bjtLevel) {                 // vRBase exceeds minimum level of BJT
 
-//     A voltage drop across the base resistor Rh means that a current
+//     A voltage drop across the base resistor rHigh means that a current
 //     is flowing constantly. So this can't be a FET.
 // 
 //     Problem:
@@ -1663,183 +1681,183 @@ void CheckBJTorEnhModeMOSFET(byte BJT_Type, unsigned int U_Rl) {
 //      test results with the higher hFE.
 
     // Two test runs needed at maximium to get right hFE & pins
-    if(Check.Found == COMP_BJT) Check.Done = 1;
-    Check.Found = COMP_BJT;
-    Check.Type = BJT_Type;
+    if(check.found == COMP_BJT) check.done = 1;
+    check.found = COMP_BJT;
+    check.type = bjtType;
     // Leakage current
-    I_CE0 = GetLeakageCurrent();          // Get leakage current (in µA)
+    iCeo = getLeakageCurrent();          // Get leakage current (in µA)
 
 //     Calculate hFE via voltages and known resistors:
 //      - hFE = I_c / I_b
-//            = (U_R_c / R_c) / (U_R_b / R_b)
-//            = (U_R_c * R_b) / (U_R_b * R_c)
+//            = (vRCollector / rCollector) / (vRBase / rBase)
+//            = (vRCollector * rBase) / (vRBase * rCollector)
 //      - consider leakage current:
 //        I_c = I_c_conducting - I_c_leak
-//            = (U_R_c_conducting / R_c) - (U_R_c_leak / R_c)
-//            = (U_R_c_conducting - U_R_c_leak) / R_c
-//        -> U_R_c = U_R_c_conducting - U_R_c_leak
-//                 = U_R_c_conducting - U_Rl
+//            = (vRCollector_conducting / rCollector) - (vRCollector_leak / rCollector)
+//            = (vRCollector_conducting - vRCollector_leak) / rCollector
+//        -> vRCollector = vRCollector_conducting - vRCollector_leak
+//                 = vRCollector_conducting - vRLow
 
-    if(U_R_c > U_Rl) U_R_c -= U_Rl;       // - U_Rl (leakage)
-    hFE_E = U_R_c * R_HIGH;               // U_R_c * R_b
-    hFE_E /= U_R_b;                       // / U_R_b
-    hFE_E *= 10;                          // Upscale to 0.1
-    if(BJT_Type == TYPE_NPN)              // NPN
-      hFE_E /= (R_LOW * 10) + Config.RiH; // / R_c in 0.1 Ohm
+    if(vRCollector > vRLow) vRCollector -= vRLow;       // - vRLow (leakage)
+    hFeCommonEmitter = vRCollector * R_HIGH;               // vRCollector * rBase
+    hFeCommonEmitter /= vRBase;                       // / vRBase
+    hFeCommonEmitter *= 10;                          // Upscale to 0.1
+    if(bjtType == TYPE_NPN)              // NPN
+      hFeCommonEmitter /= (R_LOW * 10) + parameters.rIntHigh; // / rCollector in 0.1 Ohm
     else                                  // PNP
-      hFE_E /= (R_LOW * 10) + Config.RiL; // / R_c in 0.1 Ohm
+      hFeCommonEmitter /= (R_LOW * 10) + parameters.rIntLow; // / rCollector in 0.1 Ohm
 
     // Get hFE for common collector circuit
-    hFE_C = Get_hFE_C(BJT_Type);
+    hFeCommonCollector = getHFeCommonCollector(bjtType);
 
     // Keep largest hFE
-    if(hFE_C > hFE_E) hFE_E = hFE_C;
+    if(hFeCommonCollector > hFeCommonEmitter) hFeCommonEmitter = hFeCommonCollector;
 
     // Only update data if hFE is larger than old one
-    if(hFE_E > BJT.hFE) {
+    if(hFeCommonEmitter > bjt.hFe) {
       // Save data
-      BJT.hFE = hFE_E;
-      BJT.I_CE0 = I_CE0;
-      BJT.B = Probes.Pin_3;
-      if(BJT_Type == TYPE_NPN)            // NPN
+      bjt.hFe = hFeCommonEmitter;
+      bjt.iCeo = iCeo;
+      bjt.b = probes.pin3;
+      if(bjtType == TYPE_NPN)            // NPN
       {
-        BJT.C = Probes.Pin_1;
-        BJT.E = Probes.Pin_2;
+        bjt.c = probes.pin1;
+        bjt.e = probes.pin2;
       } else {                            // PNP
-        BJT.C = Probes.Pin_2;
-        BJT.E = Probes.Pin_1;
+        bjt.c = probes.pin2;
+        bjt.e = probes.pin1;
       }
     }
-  } else if((U_Rl < 97) && (U_R_c > FET_Level)) { // No BJT
+  } else if((vRLow < 97) && (vRCollector > fetLevel)) { // No BJT
 
 //     If there's
 //      - just a small leakage current (< 0.1mA) in non-conducting mode
-//      - a large U_R_c (= large current) when conducting
-//      - a low U_R_b (= very low gate current)
+//      - a large vRCollector (= large current) when conducting
+//      - a low vRBase (= very low gate current)
 //      we got a FET or an IGBT.
 //      The drain source channel of a MOSFET is modeled as a resistor
 //      while an IGBT acts more like a diode. So we measure the voltage drop
 //      across the conducting path. A MOSFET got a low voltage drop based on
 //      its R_DS_on and the current. An IGBT got a much higher voltage drop.
 
-    I_CE0 = ReadU(Probes.Pin_1) - ReadU(Probes.Pin_2);
-    if(I_CE0 < 250) {                     // MOSFET
-      Check.Found = COMP_FET;
-      Check.Type = FET_Type | TYPE_ENHANCEMENT | TYPE_MOSFET;
+    iCeo = readVoltage(probes.pin1, 1) - readVoltage(probes.pin2, 1);
+    if(iCeo < 250) {                     // MOSFET
+      check.found = COMP_FET;
+      check.type = fetType | TYPE_ENHANCEMENT | TYPE_MOSFET;
     } else {                              // IGBT
-      Check.Found = COMP_IGBT;
-      Check.Type = FET_Type | TYPE_ENHANCEMENT;
+      check.found = COMP_IGBT;
+      check.type = fetType | TYPE_ENHANCEMENT;
     }
-    Check.Done = 1;                       // Transistor found
+    check.done = 1;                       // Transistor found
 
     // Measure gate threshold voltage
-    GetGateThreshold(FET_Type);
+    getGateThreshold(fetType);
 
     // Save data
-    FET.G = Probes.Pin_3;
-    if(FET_Type == TYPE_N_CHANNEL) {      // N-channel
-      FET.D = Probes.Pin_1;
-      FET.S = Probes.Pin_2;
+    fet.g = probes.pin3;
+    if(fetType == TYPE_N_CHANNEL) {      // N-channel
+      fet.d = probes.pin1;
+      fet.s = probes.pin2;
     } else {                              // P-channel
-      FET.D = Probes.Pin_2;
-      FET.S = Probes.Pin_1;
+      fet.d = probes.pin2;
+      fet.s = probes.pin1;
     }
   }
 }
 
 // Check for a depletion mode FET (self conducting)
-void CheckDepletionModeFET(unsigned int U_Rl_L) {
-  unsigned int U_1;                       // Voltage #1
-  unsigned int U_2;                       // Voltage #2
+void checkDepletionModeFet(unsigned int vRLowLow) {
+  unsigned int v1;                       // Voltage #1
+  unsigned int v2;                       // Voltage #2
 
 //   Required probe setup (by calling function):
-//    - Gnd -- Rl -- probe-2 / probe-1 -- Vcc
+//    - Gnd -- rLow -- probe-2 / probe-1 -- Vcc
 // 
 //   Check if we got a n-channel JFET or depletion-mode MOSFET
 //    - JFETs are depletion-mode only
 
-  if(Check.Done == 0) {                   // No transistor found yet
+  if(check.done == 0) {                   // No transistor found yet
     // We assume: probe-1 = D / probe-2 = S / probe-3 = G,
-    // probes already set to: Gnd -- Rl -- probe-2 / probe-1 -- Vcc
-    R_DDR = Probes.R_low_2_mask | Probes.R_high_3_mask;           // Pull down gate via Rh
-    U_1 = ReadU_20ms(Probes.Pin_2);       // Voltage at source
-    R_PORT = Probes.R_high_3_mask;        // Pull up gate via Rh
-    U_2 = ReadU_20ms(Probes.Pin_2);       // Voltage at source
+    // probes already set to: Gnd -- rLow -- probe-2 / probe-1 -- Vcc
+    R_DDR = probes.rLow2Mask | probes.rHigh3Mask;           // Pull down gate via rHigh
+    v1 = readVoltage20ms(probes.pin2);       // Voltage at source
+    R_PORT = probes.rHigh3Mask;        // Pull up gate via rHigh
+    v2 = readVoltage20ms(probes.pin2);       // Voltage at source
 
 //     If the source voltage is higher when the gate is driven by a positive
 //     voltage vs. connected to ground we got a depletion-mode n-channel FET.
 //     The source resistor creates a voltage offset based on the current
 //     causing V_GS to become negative with the gate pulled down.
 
-    if(U_2 > (U_1 + 488)) {
+    if(v2 > (v1 + 488)) {
       // Compare gate voltages to distinguish JFET from MOSFET
-      // Set probes: Gnd -- probe-2 / probe-1 -- Rl -- Vcc
-      SetADCLow();                        // Set ADC port to low
-      ADC_DDR = Probes.Probe_2_ADC;       // Pull down source directly
-      R_DDR = Probes.R_low_1_mask | Probes.R_high_3_mask; // Enable Rl for probe-1 & Rh for probe-3
-      R_PORT = Probes.R_low_1_mask | Probes.R_high_3_mask; // Pull up drain via Rl / pull up gate via Rh
-      U_2 = ReadU_20ms(Probes.Pin_3);     // Get voltage at gate
-      if(U_2 > 3911) {                    // MOSFET
+      // Set probes: Gnd -- probe-2 / probe-1 -- rLow -- Vcc
+      setAdcLow();                        // Set ADC port to low
+      ADC_DDR = probes.probe2Adc;       // Pull down source directly
+      R_DDR = probes.rLow1Mask | probes.rHigh3Mask; // Enable rLow for probe-1 & rHigh for probe-3
+      R_PORT = probes.rLow1Mask | probes.rHigh3Mask; // Pull up drain via rLow / pull up gate via rHigh
+      v2 = readVoltage20ms(probes.pin3);     // Get voltage at gate
+      if(v2 > 3911) {                    // MOSFET
         // N-channel depletion-mode MOSFET
-        Check.Type = TYPE_N_CHANNEL | TYPE_DEPLETION | TYPE_MOSFET;
+        check.type = TYPE_N_CHANNEL | TYPE_DEPLETION | TYPE_MOSFET;
       } else {                            // JFET
         // N-channel JFET (depletion-mode only)
-        Check.Type = TYPE_N_CHANNEL | TYPE_JFET;
+        check.type = TYPE_N_CHANNEL | TYPE_JFET;
       }
       // Save data
-      Check.Found = COMP_FET;
-      Check.Done = 1;
-      FET.G = Probes.Pin_3;
-      FET.D = Probes.Pin_1;
-      FET.S = Probes.Pin_2;
+      check.found = COMP_FET;
+      check.done = 1;
+      fet.g = probes.pin3;
+      fet.d = probes.pin1;
+      fet.s = probes.pin2;
     }
   }
   // Check if we got a p-channel JFET or depletion-mode MOSFET - JFETs are depletion-mode only
-  if(Check.Done == 0) {                   // No transistor found yet
+  if(check.done == 0) {                   // No transistor found yet
     // We assume: probe-1 = S / probe-2 = D / probe-3 = G,
-    // set probes: Gnd -- probe-2 / probe-1 -- Rl -- Vcc
-    SetADCLow();                          // Set ADC port to Gnd
-    ADC_DDR = Probes.Probe_2_ADC;         // Pull down drain directly
-    R_DDR = Probes.R_low_1_mask | Probes.R_high_3_mask; // Enable Rl for probe-1 & Rh for probe-3
-    R_PORT = Probes.R_low_1_mask | Probes.R_high_3_mask; // Pull up source via Rl / pull up gate via Rh
-    U_1 = ReadU_20ms(Probes.Pin_1);       // Get voltage at source
-    R_PORT = Probes.R_low_1_mask;         // Pull down gate via Rh
-    U_2 = ReadU_20ms(Probes.Pin_1);       // Get voltage at source
+    // set probes: Gnd -- probe-2 / probe-1 -- rLow -- Vcc
+    setAdcLow();                          // Set ADC port to Gnd
+    ADC_DDR = probes.probe2Adc;         // Pull down drain directly
+    R_DDR = probes.rLow1Mask | probes.rHigh3Mask; // Enable rLow for probe-1 & rHigh for probe-3
+    R_PORT = probes.rLow1Mask | probes.rHigh3Mask; // Pull up source via rLow / pull up gate via rHigh
+    v1 = readVoltage20ms(probes.pin1);       // Get voltage at source
+    R_PORT = probes.rLow1Mask;         // Pull down gate via rHigh
+    v2 = readVoltage20ms(probes.pin1);       // Get voltage at source
 
 //     If the source voltage is higher when the gate is driven by a positive
 //     voltage vs. connected to ground we got a depletion-mode p-channel FET.
 //     The source resistor creates a voltage offset based on the current
 //     causing V_GS to become positive with the gate pulled up.
 
-    if(U_1 > (U_2 + 488)) {
+    if(v1 > (v2 + 488)) {
       // Compare gate voltages to distinguish JFET from MOSFET
       // Set probes: probe-2 = HiZ / probe-1 -- Vcc
-      ADC_PORT = Probes.Probe_1_ADC;      // Pull up source directly
-      ADC_DDR = Probes.Probe_1_ADC;       // Enable pull up for source
-      // Gate is still pulled down via Rh
-      U_2 = ReadU_20ms(Probes.Pin_3);     // Get voltage at gate
-      if(U_2 < 977) {                     // MOSFET
+      ADC_PORT = probes.probe1Adc;      // Pull up source directly
+      ADC_DDR = probes.probe1Adc;       // Enable pull up for source
+      // Gate is still pulled down via rHigh
+      v2 = readVoltage20ms(probes.pin3);     // Get voltage at gate
+      if(v2 < 977) {                     // MOSFET
         // P-channel depletion-mode MOSFET
-        Check.Type =  TYPE_P_CHANNEL | TYPE_DEPLETION | TYPE_MOSFET;
+        check.type =  TYPE_P_CHANNEL | TYPE_DEPLETION | TYPE_MOSFET;
       } else {                            // JFET
         // P-channel JFET (depletion-mode only)
-        Check.Type = TYPE_P_CHANNEL | TYPE_DEPLETION | TYPE_JFET;
+        check.type = TYPE_P_CHANNEL | TYPE_DEPLETION | TYPE_JFET;
       }
       // Save data
-      Check.Found = COMP_FET;
-      Check.Done = 1;
-      FET.G = Probes.Pin_3;
-      FET.D = Probes.Pin_2;
-      FET.S = Probes.Pin_1;
+      check.found = COMP_FET;
+      check.done = 1;
+      fet.g = probes.pin3;
+      fet.d = probes.pin2;
+      fet.s = probes.pin1;
     }
   }
 }
 
 // Special devices
-byte CheckThyristorTriac(void) {
-  byte Flag = 0;                          // Return value
-  unsigned int U_1;                       // Voltage #1
-  unsigned int U_2;                       // Voltage #2
+byte checkThyristorTriac(void) {
+  byte flag = 0;                          // Return value
+  unsigned int v1;                       // Voltage #1
+  unsigned int v2;                       // Voltage #2
 
 //   Check for a thyristor (SCR) or triac
 //    - A thyristor conducts also after the gate is discharged as long
@@ -1849,19 +1867,19 @@ byte CheckThyristorTriac(void) {
 //      it can't detect all types.
 // 
 //    probes need to be set already to:
-//      Gnd -- probe-2 / probe-1 -- Rl -- Vcc
+//      Gnd -- probe-2 / probe-1 -- rLow -- Vcc
 
   // We assume: probe-1 = A / probe-2 = C / probe-3 = G, discharge gate
-  PullProbe(Probes.R_low_3_mask, FLAG_10MS | FLAG_PULLDOWN);
-  U_1 = ReadU_5ms(Probes.Pin_1);          // Get voltage at anode
+  pullProbe(probes.rLow3Mask, FLAG_10MS | FLAG_PULLDOWN);
+  v1 = readVoltage5ms(probes.pin1);          // Get voltage at anode
   R_PORT = 0;                             // Pull down anode
   delay(5);
-  R_PORT = Probes.R_low_1_mask;           // And pull up anode again
-  U_2 = ReadU_5ms(Probes.Pin_1);          // Get voltage at anode (below Rl)
+  R_PORT = probes.rLow1Mask;           // And pull up anode again
+  v2 = readVoltage5ms(probes.pin1);          // Get voltage at anode (below rLow)
   // Voltages match behaviour of thyristor or triac
-  if((U_1 < 1600) && (U_2 > 4400)) {
-    Check.Found = COMP_THYRISTOR;         // If not detected as a triac below
-    Check.Done = 1;
+  if((v1 < 1600) && (v2 > 4400)) {
+    check.found = COMP_THYRISTOR;         // If not detected as a triac below
+    check.done = 1;
 
 //     Check if we got a triac
 //      - reverse A and C (A = MT2 / C = MT1)
@@ -1870,165 +1888,165 @@ byte CheckThyristorTriac(void) {
     // We assume: probe-1 = MT2 / probe-2 = MT1 / probe-3 = G
     R_DDR = 0;                            // Disable all probe resistors
     R_PORT = 0;
-    ADC_PORT = Probes.Probe_2_ADC;        // Pull up MT1 directly
+    ADC_PORT = probes.probe2Adc;        // Pull up MT1 directly
     delay(5);
-    R_DDR = Probes.R_low_1_mask;          // Pull down MT2 via Rl
+    R_DDR = probes.rLow1Mask;          // Pull down MT2 via rLow
     // Probe-3/gate is in HiZ mode, triac shouldn't conduct without a triggered gate
-    U_1 = ReadU_5ms(Probes.Pin_1);        // Get voltage at MT2
+    v1 = readVoltage5ms(probes.pin1);        // Get voltage at MT2
     // Voltage of MT2 is low (no current)
-    if(U_1 <= 244) {
+    if(v1 <= 244) {
       // Trigger gate for reverse direction
-      R_DDR = Probes.R_low_1_mask | Probes.R_low_3_mask; // And pull down gate via Rl
-      U_1 = ReadU_5ms(Probes.Pin_3);      // Get voltage at gate
-      U_2 = ReadU(Probes.Pin_1);          // Get voltage at MT2
+      R_DDR = probes.rLow1Mask | probes.rLow3Mask; // And pull down gate via rLow
+      v1 = readVoltage5ms(probes.pin3);      // Get voltage at gate
+      v2 = readVoltage(probes.pin1, 1);       // Get voltage at MT2
       // Voltage at gate is ok and voltage at MT2 is high (current = triac is conducting)
-      if((U_1 >= 977) && (U_2 >= 733)) {
+      if((v1 >= 977) && (v2 >= 733)) {
         // Check if triac still conducts without triggered gate
-        R_DDR = Probes.R_low_1_mask;      // Set probe3 to HiZ mode
-        U_1 = ReadU_5ms(Probes.Pin_1);    // Get voltage at MT2
+        R_DDR = probes.rLow1Mask;      // Set probe3 to HiZ mode
+        v1 = readVoltage5ms(probes.pin1);    // Get voltage at MT2
         // Voltage at MT2 is still high (current = triac is conducting)
-        if(U_1 >= 733) {
+        if(v1 >= 733) {
           // Check if triac stops conducting when load current drops to zero
-          R_PORT = Probes.R_low_1_mask;   // Pull up MT2 via Rl
+          R_PORT = probes.rLow1Mask;   // Pull up MT2 via rLow
           delay(5);
-          R_PORT = 0;                     // And pull down MT2 via Rl
-          U_1 = ReadU_5ms(Probes.Pin_1);  // Get voltage at MT2
+          R_PORT = 0;                     // And pull down MT2 via rLow
+          v1 = readVoltage5ms(probes.pin1);  // Get voltage at MT2
           // Voltage at MT2 is low (no current = triac is not conducting)
-          if(U_1 <= 244) {
+          if(v1 <= 244) {
             // Now we are pretty sure that the DUT is a triac
-            Check.Found = COMP_TRIAC;
+            check.found = COMP_TRIAC;
           }
         }
       }
     }
     // Save data (we misuse BJT)
-    BJT.B = Probes.Pin_3;
-    BJT.C = Probes.Pin_1;
-    BJT.E = Probes.Pin_2;
-    Flag = 1;                             // Signal that we found a component
+    bjt.b = probes.pin3;
+    bjt.c = probes.pin1;
+    bjt.e = probes.pin2;
+    flag = 1;                             // Signal that we found a component
   }
-  return Flag;
+  return flag;
 }
 
 // Measure a resistor with low resistance (< 100 Ohms)
-unsigned int SmallResistor(byte ZeroFlag) {
+unsigned int smallResistor(byte zeroFlag) {
   unsigned int R = 0;                     // Return value
-  byte Probe;                             // Probe ID
-  byte Mode;                              // Measurement mode
-  byte Counter;                           // Sample counter
-  unsigned long Value;                    // ADC sample value
-  unsigned long Value1 = 0;               // U_Rl temp. value
-  unsigned long Value2 = 0;               // U_R_i_L temp. value
-  DischargeProbes();                      // Try to discharge probes
-  if(Check.Found == COMP_ERROR) return R; // Skip on error
+  byte probe;                             // Probe id
+  byte mode;                              // Measurement mode
+  byte cnt;                           // Sample counter
+  unsigned long value;                    // ADC sample value
+  unsigned long value1 = 0;               // vRLow temp. value
+  unsigned long value2 = 0;               // vR_i_L temp. value
+  dischargeProbes();                      // Try to discharge probes
+  if(check.found == COMP_ERROR) return R; // Skip on error
 
 //   Measurement method:
-//    - use Rl as current shunt
+//    - use rLow as current shunt
 //    - create a pulse and measure voltage at high side of DUT for 1000 times
 //    - repeat that for the low side of the DUT
 
-  // Pulse on: GND -- probe 2 / probe 1 -- Rl -- 5V,
-  // pulse off: GND -- probe 2 / probe 1 -- Rl -- GND
-  SetADCLow();                            // Set ADC port to low
-  ADC_DDR = Probes.Probe_2_ADC;           // Pull-down probe 2 directly
+  // Pulse on: GND -- probe 2 / probe 1 -- rLow -- 5V,
+  // pulse off: GND -- probe 2 / probe 1 -- rLow -- GND
+  setAdcLow();                            // Set ADC port to low
+  ADC_DDR = probes.probe2Adc;           // Pull-down probe 2 directly
   R_PORT = 0;                             // Low by default
-  R_DDR = Probes.R_low_1_mask;            // Enable resistor
+  R_DDR = probes.rLow1Mask;            // Enable resistor
 
 #define MODE_HIGH B00000001
 #define MODE_LOW B00000010
 
   // Measurement loop
-  Mode = MODE_HIGH;
-  while (Mode > 0) {
+  mode = MODE_HIGH;
+  while (mode > 0) {
     // Setup measurement
-    if(Mode & MODE_HIGH) Probe = Probes.Pin_1;
-    else Probe = Probes.Pin_2;
+    if(mode & MODE_HIGH) probe = probes.pin1;
+    else probe = probes.pin2;
     wdt_reset();                          // Reset watchdog
-    Counter = 0;                          // Reset loop counter
-    Value = 0;                            // Reset sample value
+    cnt = 0;                          // Reset loop counter
+    value = 0;                            // Reset sample value
 
     // Set ADC to use bandgap reference and run a dummy conversion
-    Probe |= (1 << REFS0) | (1 << REFS1);
-    ADMUX = Probe;                        // Set input channel and U reference
+    probe |= (1 << REFS0) | (1 << REFS1);
+    ADMUX = probe;                        // Set input channel and U reference
     delayMicroseconds(100);               // Time for voltage stabilization
     ADCSRA |= (1 << ADSC);                // Start conversion
     while (ADCSRA & (1 << ADSC));         // Wait until conversion is done
 
     // Measurement loop (about 1ms per cycle)
-    while (Counter < 100) {
+    while (cnt < 100) {
       // Create short pulse
-      ADC_DDR = Probes.Probe_2_ADC;       // Pull-down probe-2 directly
-      R_PORT = Probes.R_low_1_mask;
+      ADC_DDR = probes.probe2Adc;       // Pull-down probe-2 directly
+      R_PORT = probes.rLow1Mask;
       // Start ADC conversion, ADC performs S&H after 1.5 ADC cycles (12µs)
       ADCSRA |= (1 << ADSC);              // Start conversion
       // Wait 20µs to allow the ADC to do it's job
       delayMicroseconds(20);
       // Stop pulse
       R_PORT = 0;
-      ADC_DDR = Probes.Probe_2_ADC | Probes.Probe_1_ADC;
+      ADC_DDR = probes.probe2Adc | probes.probe1Adc;
       // Get ADC reading (about 100µs)
       while (ADCSRA & (1 << ADSC));       // Wait until conversion is done
-      Value += ADCW;                      // Add ADC reading
+      value += ADCW;                      // Add ADC reading
       // Wait
       delayMicroseconds(900);
-      Counter++;                          // Next round
+      cnt++;                          // Next round
     }
 
     // Convert ADC reading to voltage
-    Value *= Config.U_Bandgap;
-    Value /= 1024;                        // / 1024 for 10bit ADC
-    Value /= 10;                          // De-sample to 0.1mV
+    value *= parameters.vBandgap;
+    value /= 1024;                        // / 1024 for 10bit ADC
+    value /= 10;                          // De-sample to 0.1mV
     // Loop control
-    if(Mode & MODE_HIGH) {                // Probe #1 / Rl
-      Mode = MODE_LOW;                    // Switch to low side
-      Value1 = Value;                     // Save measured value
+    if(mode & MODE_HIGH) {                // Probe #1 / rLow
+      mode = MODE_LOW;                    // Switch to low side
+      value1 = value;                     // Save measured value
     } else {                              // Probe #2 / R_i_L
-      Mode = 0;                           // End loop
-      Value2 = Value;                     // Save measured value
+      mode = 0;                           // End loop
+      value2 = value;                     // Save measured value
     }
   }
 
   // Process measurement
-  if(Value1 > Value2) {                   // Sanity check
-    // I = U/R = (5V - U_Rl)/(Rl + R_i_H)
-    Value = 10UL * UREF_VCC;              // in 0.1 mV
-    Value -= Value1;
-    Value *= 1000;                        // Scale to µA
-    Value /= ((R_LOW * 10) + Config.RiH); // in 0.1 Ohms
-    Value1 -= Value2;                     // in 0.1 mV
-    Value1 *= 10000;                      // Scale to 0.01 µV
+  if(value1 > value2) {                   // Sanity check
+    // I = v/R = (5V - vRLow)/(rLow + R_i_H)
+    value = 10UL * VREF_VCC;              // in 0.1 mV
+    value -= value1;
+    value *= 1000;                        // Scale to µA
+    value /= ((R_LOW * 10) + parameters.rIntHigh); // in 0.1 Ohms
+    value1 -= value2;                     // in 0.1 mV
+    value1 *= 10000;                      // Scale to 0.01 µV
     // R = U/I (including R of probe leads)
-    Value1 /= Value;                      // in 0.01 Ohms
-    R = (unsigned int)Value1;             // Copy result
-    if(ZeroFlag == 1) {                   // Auto-zero
-      if(R > Config.RZero) R -= Config.RZero;
+    value1 /= value;                      // in 0.01 Ohms
+    R = (unsigned int)value1;             // Copy result
+    if(zeroFlag == 1) {                   // Auto-zero
+      if(R > parameters.rZero) R -= parameters.rZero;
       else R = 0;
     }
   }
 #undef MODE_LOW
 #undef MODE_HIGH
-  // Update Uref flag for next ADC run
-  Config.RefFlag = (1 << REFS1);          // Set REFS1 bit flag
+  // Update vref flag for next ADC run
+  parameters.refFlag = (1 << REFS1);          // Set REFS1 bit flag
   return R;
 }
 
 // Check for resistor
-void CheckResistor(void) {
-  Resistor_Type *Resistor;                // Pointer to resistor
-  unsigned long Value1;                   // Resistance of measurement #1
-  unsigned long Value2;                   // Resistance of measurement #2
-  unsigned long Value;                    // Resistance value
-  unsigned long Temp;                     // Temp. value
-  signed char Scale;                      // Resistance scale
-  signed char Scale2;                     // Resistance scale
+void checkResistor(void) {
+  Resistors *resistor;                // Pointer to resistor
+  unsigned long value1;                   // Resistance of measurement #1
+  unsigned long value2;                   // Resistance of measurement #2
+  unsigned long value;                    // Resistance value
+  unsigned long temp;                     // Temp. value
+  signed char scale;                      // Resistance scale
+  signed char scale2;                     // Resistance scale
   byte n;                                 // Counter
   // Voltages
-  unsigned int U_Rl_H;                    // Voltage #1
-  unsigned int U_Ri_L;                    // Voltage #2
-  unsigned int U_Rl_L;                    // Voltage #3
-  unsigned int U_Ri_H;                    // Voltage #4
-  unsigned int U_Rh_H;                    // Voltage #5
-  unsigned int U_Rh_L;                    // Voltage #6
+  unsigned int vRLowHigh;                    // Voltage #1
+  unsigned int vRIntLow;                    // Voltage #2
+  unsigned int vRLowLow;                    // Voltage #3
+  unsigned int vRIntHigh;                    // Voltage #4
+  unsigned int vRHighHigh;                    // Voltage #5
+  unsigned int vRHighLow;                    // Voltage #6
 
   wdt_reset();                            // Reset watchdog
 
@@ -2040,215 +2058,215 @@ void CheckResistor(void) {
 //    - Calculate resistance via the total current and the voltage
 //      at the DUT.
 //    - We could also use the voltage divider rule:
-//      (Ra / Rb) = (Ua / Ub) -> Ra = Rb * (Ua / Ub)
+//      (Ra / Rb) = (va / vb) -> Ra = Rb * (va / vb)
 // 
 //   check if we got a resistor
 //    - A resistor has the same resistance in both directions.
 //    - We measure both directions with both probe resistors.
 
   // We assume: resistor between probe-1 and probe-2,
-  //  set probes: Gnd -- probe-2 / probe-1 -- Rl -- Vcc
+  //  set probes: Gnd -- probe-2 / probe-1 -- rLow -- Vcc
 
-  SetADCLow();                            // Set ADC port low low
-  ADC_DDR = Probes.Probe_2_ADC;           // Pull down probe-2 directly
-  R_DDR = Probes.R_low_1_mask;            // Enable Rl for probe-1
-  R_PORT = Probes.R_low_1_mask;           // Pull up probe-1 via Rl
-  U_Ri_L = ReadU_5ms(Probes.Pin_2);       // Get voltage at internal R of µC
-  U_Rl_H = ReadU(Probes.Pin_1);           // Get voltage at Rl pulled up
+  setAdcLow();                            // Set ADC port low low
+  ADC_DDR = probes.probe2Adc;           // Pull down probe-2 directly
+  R_DDR = probes.rLow1Mask;            // Enable rLow for probe-1
+  R_PORT = probes.rLow1Mask;           // Pull up probe-1 via rLow
+  vRIntLow = readVoltage5ms(probes.pin2);       // Get voltage at internal R of µC
+  vRLowHigh = readVoltage(probes.pin1, 1);        // Get voltage at rLow pulled up
 
 //   Check for a capacitor
 //    - A capacitor would need some time to discharge.
-//    - So we pull down probe-1 via Rh and measure the voltage.
+//    - So we pull down probe-1 via rHigh and measure the voltage.
 //    - The voltage will drop immediately for a resistor.
 
-  // Set probes: Gnd -- probe-2 / Gnd -- Rh -- probe-1
+  // Set probes: Gnd -- probe-2 / Gnd -- rHigh -- probe-1
   R_PORT = 0;                             // Set resistor port low
-  R_DDR = Probes.R_high_1_mask;           // Pull down probe-1 via Rh
-  U_Rh_L = ReadU_5ms(Probes.Pin_1);       // Get voltage at probe 1
+  R_DDR = probes.rHigh1Mask;           // Pull down probe-1 via rHigh
+  vRHighLow = readVoltage5ms(probes.pin1);       // Get voltage at probe 1
 
   // We got a resistor if the voltage is near Gnd
-  if(U_Rh_L <= 20) {
-    // Set probes: Gnd -- probe-2 / probe-1 -- Rh -- Vcc
-    R_PORT = Probes.R_high_1_mask;        // Pull up probe-1 via Rh
-    U_Rh_H = ReadU_5ms(Probes.Pin_1);     // Get voltage at Rh pulled up
+  if(vRHighLow <= 20) {
+    // Set probes: Gnd -- probe-2 / probe-1 -- rHigh -- Vcc
+    R_PORT = probes.rHigh1Mask;        // Pull up probe-1 via rHigh
+    vRHighHigh = readVoltage5ms(probes.pin1);     // Get voltage at rHigh pulled up
 
-    // Set probes: Gnd -- Rl -- probe-2 / probe-1 -- Vcc
-    ADC_DDR = Probes.Probe_1_ADC;         // Set probe-1 to output
-    ADC_PORT = Probes.Probe_1_ADC;        // Pull up probe-1 directly
+    // Set probes: Gnd -- rLow -- probe-2 / probe-1 -- Vcc
+    ADC_DDR = probes.probe1Adc;         // Set probe-1 to output
+    ADC_PORT = probes.probe1Adc;        // Pull up probe-1 directly
     R_PORT = 0;                           // Set resistor port to low
-    R_DDR = Probes.R_low_2_mask;          // Pull down probe-2 via Rl
-    U_Ri_H = ReadU_5ms(Probes.Pin_1);     // Get voltage at internal R of µC
-    U_Rl_L = ReadU(Probes.Pin_2);         // Get voltage at Rl pulled down
+    R_DDR = probes.rLow2Mask;          // Pull down probe-2 via rLow
+    vRIntHigh = readVoltage5ms(probes.pin1);     // Get voltage at internal R of µC
+    vRLowLow = readVoltage(probes.pin2, 1);      // Get voltage at rLow pulled down
 
-    // Set probes: Gnd -- Rh -- probe-2 / probe-1 -- Vcc
-    R_DDR = Probes.R_high_2_mask;         // Pull down probe-2 via Rh
-    U_Rh_L = ReadU_5ms(Probes.Pin_2);     // Get voltage at Rh pulled down
+    // Set probes: Gnd -- rHigh -- probe-2 / probe-1 -- Vcc
+    R_DDR = probes.rHigh2Mask;         // Pull down probe-2 via rHigh
+    vRHighLow = readVoltage5ms(probes.pin2);     // Get voltage at rHigh pulled down
 
     // If voltage breakdown is sufficient
-    if((U_Rl_H >= 4400) || (U_Rh_H <= 97)) { // R >= 5.1k / R < 9.3k
-      if(U_Rh_H < 4972) {                 // R < 83.4M & prevent division by zero
+    if((vRLowHigh >= 4400) || (vRHighHigh <= 97)) { // R >= 5.1k / R < 9.3k
+      if(vRHighHigh < 4972) {                 // R < 83.4M & prevent division by zero
 
         // Voltage breaks down with low test current and it is not nearly shorted => resistor
-        Value = 0;                        // Reset value of resistor
-        if(U_Rl_L < 169) {                // R > 19.5k
+        value = 0;                        // Reset value of resistor
+        if(vRLowLow < 169) {                // R > 19.5k
 
-          // Use measurements done with Rh, resistor is less 60MOhm
-          if(U_Rh_L >= 38) {              // R < 61.4M & prevent division by zero
+          // Use measurements done with rHigh, resistor is less 60MOhm
+          if(vRHighLow >= 38) {              // R < 61.4M & prevent division by zero
 
-//             Rh pulled up (above DUT):
-//             I = U_Rh / Rh = (Vcc - U_Rh_H) / Rh
-//             R = U_R / I = U_Rh_H / ((Vcc - U_Rh_H) / Rh)
-//               = Rh * U_Rh_H / (Vcc - U_Rh_H)
+//             rHigh pulled up (above DUT):
+//             I = vRHigh / rHigh = (Vcc - vRHighHigh) / rHigh
+//             R = vR / I = vRHighHigh / ((Vcc - vRHighHigh) / rHigh)
+//               = rHigh * vRHighHigh / (Vcc - vRHighHigh)
 // 
 //             Or via voltage divider:
-//             R = Rh * (U_dut / U_Rh)
-//               = Rh * (U_Rh_H / (Vcc - U_Rh_H))
+//             R = rHigh * (vdut / vRHigh)
+//               = rHigh * (vRHighHigh / (Vcc - vRHighHigh))
 
-            Value1 = R_HIGH * U_Rh_H;
-            Value1 /= (UREF_VCC - U_Rh_H);
+            value1 = R_HIGH * vRHighHigh;
+            value1 /= (VREF_VCC - vRHighHigh);
 
-//             Rh pulled down (below DUT):
-//             I = U_Rh_L / Rh
-//             R = U_R / I = (Vcc - U_Rh_L) / (U_Rh_L / Rh)
-//               = Rh * (Vcc - U_Rh_L) / U_Rh_L
+//             rHigh pulled down (below DUT):
+//             I = vRHighLow / rHigh
+//             R = vR / I = (Vcc - vRHighLow) / (vRHighLow / rHigh)
+//               = rHigh * (Vcc - vRHighLow) / vRHighLow
 // 
 //             Or via voltage divider:
-//             R = Rh * (U_R / U_Rh)
-//               = Rh * ((Vcc - U_Rh_L) / U_Rh_L)
+//             R = rHigh * (vR / vRHigh)
+//               = rHigh * ((Vcc - vRHighLow) / vRHighLow)
 
-            Value2 = R_HIGH * (UREF_VCC - U_Rh_L);
-            Value2 /= U_Rh_L;
+            value2 = R_HIGH * (VREF_VCC - vRHighLow);
+            value2 /= vRHighLow;
 
 //             Calculate weighted average of both measurements
 //              - Voltages below the bandgap reference got a higher resolution
 //                (1.1mV instead of 4.9mV).
 
-            if(U_Rh_H < 990) {            // Below bandgap reference
-              // Weighted average for U_Rh_H
-              Value = (Value1 * 4);
-              Value += Value2;
-              Value /= 5;
-              Value = Value2;
-            } else if(U_Rh_L < 990) {     // Below bandgap reference
-              // Weighted average for U_Rh_L
-              Value = (Value2 * 4);
-              Value += Value1;
-              Value /= 5;
+            if(vRHighHigh < 990) {            // Below bandgap reference
+              // Weighted average for vRHighHigh
+              value = (value1 * 4);
+              value += value2;
+              value /= 5;
+              value = value2;
+            } else if(vRHighLow < 990) {     // Below bandgap reference
+              // Weighted average for vRHighLow
+              value = (value2 * 4);
+              value += value1;
+              value /= 5;
             } else {                      // Higher than bandgap reference
               // Classic average
-              Value = (Value1 + Value2) / 2;
+              value = (value1 + value2) / 2;
             }
-            Value += RH_OFFSET;           // Add offset value for Rh
-            Value *= 10;                  // Upscale to 0.1 Ohms
+            value += RH_OFFSET;           // Add offset value for RHigh
+            value *= 10;                  // Upscale to 0.1 Ohms
           }
-        } else {                          // U_Rl_L: R <= 19.5k
-          // Use measurements done with Rl
+        } else {                          // vRLowLow: R <= 19.5k
+          // Use measurements done with rLow
           // Voltages below and above DUT match voltage divider
           // Voltage below DUT can't be higher than above DUT
-          if((U_Rl_H >= U_Ri_L) && (U_Ri_H >= U_Rl_L)) {
+          if((vRLowHigh >= vRIntLow) && (vRIntHigh >= vRLowLow)) {
 
-//             Rl pulled up (above DUT):
-//             I = U_Rl_RiH / (Rl + RiH) = (Vcc - U_Rl_H) / (Rl + RiH)
-//             R = U_Dut / I
-//               = (U_Rl_H - U_Ri_L) / ((Vcc - U_Rl_H) / (Rl + RiH))
-//               = (Rl + RiH) * (U_Rl_H - U_Ri_L) / (Vcc - U_Rl_H)
+//             rLow pulled up (above DUT):
+//             I = vRLowRIntHigh / (rLow + rIntHigh) = (Vcc - vRLowHigh) / (rLow + rIntHigh)
+//             R = vDut / I
+//               = (vRLowHigh - vRIntLow) / ((Vcc - vRLowHigh) / (rLow + rIntHigh))
+//               = (rLow + rIntHigh) * (vRLowHigh - vRIntLow) / (Vcc - vRLowHigh)
 // 
 //             Or via voltage divider:
-//             R = (Rl + RiH) * (U_R_RiL / U_Rl_RiH) - RiL
-//               = (Rl + RiH) * (U_R_RiL / (Vcc - U_dut_RiL)) - RiL
+//             R = (rLow + rIntHigh) * (vR_rIntLow / vRLowRIntHigh) - rIntLow
+//               = (rLow + rIntHigh) * (vR_rIntLow / (Vcc - vdut_rIntLow)) - rIntLow
 
             // Prevent division by zero
-            if(U_Rl_H == UREF_VCC) U_Rl_H = UREF_VCC - 1;
-            Value1 = (R_LOW * 10) + Config.RiH; // Rl + RiH in 0.1 Ohm
-            Value1 *= (U_Rl_H - U_Ri_L);
-            Value1 /= (UREF_VCC - U_Rl_H);
+            if(vRLowHigh == VREF_VCC) vRLowHigh = VREF_VCC - 1;
+            value1 = (R_LOW * 10) + parameters.rIntHigh; // rLow + rIntHigh in 0.1 Ohm
+            value1 *= (vRLowHigh - vRIntLow);
+            value1 /= (VREF_VCC - vRLowHigh);
 
-//             Rl pulled down (below DUT):
-//             I = U_Rl_RiL / (Rl + RiL)
-//             R = U_R / I
-//               = (U_Ri_H - U_Rl_L) / (U_Rl_RiL / (Rl + RiL))
-//               = (Rl + RiL) * (U_Ri_H - U_Rl_L) / U_Rl_RiL
+//             rLow pulled down (below DUT):
+//             I = vRLow_rIntLow / (rLow + rIntLow)
+//             R = vR / I
+//               = (vRIntHigh - vRLowLow) / (vRLow_rIntLow / (rLow + rIntLow))
+//               = (rLow + rIntLow) * (vRIntHigh - vRLowLow) / vRLow_rIntLow
 // 
 //             Or via voltage divider:
-//             R = (Rl + RiL) * (U_R_RiH / U_Rl_RiL) - RiH
-//               = (Rl + RiL) * ((Vcc - U_Rl_RiL) / U_Rl_RiL) - RiH
+//             R = (rLow + rIntLow) * (vRIntHigh / vRLow_rIntLow) - rIntHigh
+//               = (rLow + rIntLow) * ((Vcc - vRLow_rIntLow) / vRLow_rIntLow) - rIntHigh
 
-            Value2 = (R_LOW * 10) + Config.RiL; // Rl + RiL in 0.1 Ohms
-            Value2 *= (U_Ri_H - U_Rl_L);
-            Value2 /= U_Rl_L;
+            value2 = (R_LOW * 10) + parameters.rIntLow; // rLow + rIntLow in 0.1 Ohms
+            value2 *= (vRIntHigh - vRLowLow);
+            value2 /= vRLowLow;
 
 //             Calculate weighted average of both measurements
 //              - Voltages below the bandgap reference got a higher resolution
 //                (1.1mV instead of 4.9mV).
 
-            if(U_Rl_H < 990) {            // Below bandgap reference
-              // Weighted average for U_Rh_H
-              Value = (Value1 * 4);
-              Value += Value2;
-              Value /= 5;
-            } else if(U_Rl_L < 990) {     // Below bandgap reference
-              // Weighted average for U_Rh_L
-              Value = (Value2 * 4);
-              Value += Value1;
-              Value /= 5;
+            if(vRLowHigh < 990) {            // Below bandgap reference
+              // Weighted average for vRHighHigh
+              value = (value1 * 4);
+              value += value2;
+              value /= 5;
+            } else if(vRLowLow < 990) {     // Below bandgap reference
+              // Weighted average for vRHighLow
+              value = (value2 * 4);
+              value += value1;
+              value /= 5;
             } else {                      // Higher than bandgap reference
               // Classic average
-              Value = (Value1 + Value2) / 2;
+              value = (value1 + value2) / 2;
             }
           } else {                        // May happen for very low resistances
-            if(U_Rl_L > 4750) Value = 1;  // U_Rl_L: R < 15 Ohms
+            if(vRLowLow > 4750) value = 1;  // vRLowLow: R < 15 Ohms
             // This will trigger the low resistance measurement below
           }
         }
         // Process results of the resistance measurement
-        if(Value > 0) {                   // Valid resistor
-          Scale = -1;                     // 0.1 Ohm by default
+        if(value > 0) {                   // Valid resistor
+          scale = -1;                     // 0.1 Ohm by default
 
           // Meassure small resistor <10 Ohm with special method
-          if(Value < 100UL) {
+          if(value < 100UL) {
 
             // Run low resistance measurement
-            Value2 = (unsigned long)SmallResistor(1);
-            Scale2 = -2;                  // 0.01 Ohm
+            value2 = (unsigned long)smallResistor(1);
+            scale2 = -2;                  // 0.01 Ohm
 
             // Check for valid result
-            Value1 = Value * 2;           // Allow 100% tolerance
-            Value1 *= 10;                 // Re-scale to 0.01 Ohms
-            if(Value1 > Value2) {         // Got expected value
-              Value = Value2;             // Update data
-              Scale = Scale2;
+            value1 = value * 2;           // Allow 100% tolerance
+            value1 *= 10;                 // Re-scale to 0.01 Ohms
+            if(value1 > value2) {         // Got expected value
+              value = value2;             // Update data
+              scale = scale2;
             }
           }
 
           // Check for measurement in reversed direction
           n = 0;
-          while (n < Check.Resistors) {   // Loop through resistors
-            Resistor = &Resistors[n];     // Pointer to element
-            if((Resistor->A == Probes.Pin_1) && (Resistor->B == Probes.Pin_2)) {
+          while (n < check.resistors) {   // Loop through resistors
+            resistor = &resistors[n];     // Pointer to element
+            if((resistor->a == probes.pin1) && (resistor->b == probes.pin2)) {
 
               // Check if the reversed measurement is within a specific tolerance
               // Set lower and upper tolerance limits
               // < 2 Ohm
-              if(CmpValue(Value, Scale, 2, 0) == -1) {
-                Temp = Value / 2;         // 50%
+              if(cmpValue(value, scale, 2, 0) == -1) {
+                temp = value / 2;         // 50%
               } else {                    // >= 2 Ohm
-                Temp = Value / 20;        // 5%
+                temp = value / 20;        // 5%
               }
-              Value1 = Value - Temp;      // 95% or 50%
-              Value2 = Value + Temp;      // 105% or 150%
+              value1 = value - temp;      // 95% or 50%
+              value2 = value + temp;      // 105% or 150%
 
               // Special case for very low resistance
               // < 0.1 Ohm
-              if(CmpValue(Value, Scale, 1, -1) == -1) {
-                Value1 = 0;               // 0
-                Value2 = Value * 5;       // 500%
-                if(Value2 == 0) Value2 = 5; // Special case
+              if(cmpValue(value, scale, 1, -1) == -1) {
+                value1 = 0;               // 0
+                value2 = value * 5;       // 500%
+                if(value2 == 0) value2 = 5; // Special case
               }
 
               // Check if value matches given tolerance
-              if((CmpValue(Resistor->Value, Resistor->Scale, Value1, Scale) >= 0) &&
-                  (CmpValue(Resistor->Value, Resistor->Scale, Value2, Scale) <= 0)) {
-                Check.Found = COMP_RESISTOR;
+              if((cmpValue(resistor->value, resistor->scale, value1, scale) >= 0) &&
+                  (cmpValue(resistor->value, resistor->scale, value2, scale) <= 0)) {
+                check.found = COMP_RESISTOR;
                 n = 100;                  // End loop and signal match
               } else {                    // No match
                 n = 200;                  // End loop and signal mis-match
@@ -2260,15 +2278,15 @@ void CheckResistor(void) {
 
           // We got a new resistor
           if(n != 100) {                  // Not a known resistor
-            if(Check.Resistors < 3) {     // Prevent array overflow
+            if(check.resistors < 3) {     // Prevent array overflow
               // Save data
               // Unused dataset
-              Resistor = &Resistors[Check.Resistors];
-              Resistor->A = Probes.Pin_2;
-              Resistor->B = Probes.Pin_1;
-              Resistor->Value = Value;
-              Resistor->Scale = Scale;
-              Check.Resistors++;          // Another one found
+              resistor = &resistors[check.resistors];
+              resistor->a = probes.pin2;
+              resistor->b = probes.pin1;
+              resistor->value = value;
+              resistor->scale = scale;
+              check.resistors++;          // Another one found
             }
           }
         }
@@ -2278,75 +2296,75 @@ void CheckResistor(void) {
 }
 
 // Compare two scaled values
-signed char CmpValue(unsigned long Value1, signed char Scale1, unsigned long Value2, signed char Scale2) {
-  signed char Flag;                       // Return value
-  signed char Len1, Len2;                 // Length
+signed char cmpValue(unsigned long value1, signed char scale1, unsigned long value2, signed char scale2) {
+  signed char flag;                       // Return value
+  signed char len1, len2;                 // Length
 
   // Determine virtual length
-  Len1 = NumberOfDigits(Value1) + Scale1;
-  Len2 = NumberOfDigits(Value2) + Scale2;
-  if((Value1 == 0) || (Value2 == 0)) {    // Special case
-    Flag = 10;                            // Perform direct comparison
-  } else if(Len1 > Len2) {                // More digits -> larger
-    Flag = 1;
-  } else if(Len1 == Len2) {               // Same length
+  len1 = numberOfDigits(value1) + scale1;
+  len2 = numberOfDigits(value2) + scale2;
+  if((value1 == 0) || (value2 == 0)) {    // Special case
+    flag = 10;                            // Perform direct comparison
+  } else if(len1 > len2) {                // More digits -> larger
+    flag = 1;
+  } else if(len1 == len2) {               // Same length
     // Re-scale to longer value
-    Len1 -= Scale1;
-    Len2 -= Scale2;
-    while (Len1 > Len2) {                 // Up-scale Value #2
-      Value2 *= 10;
-      Len2++;
+    len1 -= scale1;
+    len2 -= scale2;
+    while (len1 > len2) {                 // Up-scale value #2
+      value2 *= 10;
+      len2++;
     }
-    while (Len2 > Len1) {                 // Up-scale Value #1
-      Value1 *= 10;
-      Len1++;
+    while (len2 > len1) {                 // Up-scale value #1
+      value1 *= 10;
+      len1++;
     }
-    Flag = 10;                            // Perform direct comparison
+    flag = 10;                            // Perform direct comparison
   } else {                                // Less digits -> smaller
-    Flag = -1;
+    flag = -1;
   }
 
-  if(Flag == 10) {                        // Perform direct comparison
-    if(Value1 > Value2) Flag = 1;
-    else if(Value1 < Value2) Flag = -1;
-    else Flag = 0;
+  if(flag == 10) {                        // Perform direct comparison
+    if(value1 > value2) flag = 1;
+    else if(value1 < value2) flag = -1;
+    else flag = 0;
   }
-  return Flag;
+  return flag;
 }
 
 // Get number of digits of a value
-byte NumberOfDigits(unsigned long Value) {
-  byte Counter = 1;
+byte numberOfDigits(unsigned long value) {
+  byte cnt = 1;
 
-  while (Value >= 10) {
-    Value /= 10;
-    Counter++;
+  while (value >= 10) {
+    value /= 10;
+    cnt++;
   }
-  return Counter;
+  return cnt;
 }
 
 // Measure cap >4.7µF between two probe pins
-byte LargeCap(Capacitor_Type *Cap) {
-  byte Flag = 3;                          // Return value
-  byte TempByte;                          // Temp. value
-  byte Mode;                              // Measurement mode
-  signed char Scale;                      // Capacitance scale
-  unsigned int TempInt;                   // Temp. value
-  unsigned int Pulses;                    // Number of charging pulses
-  unsigned int U_Zero;                    // Voltage before charging
-  unsigned int U_Cap;                     // Voltage of DUT
-  unsigned int U_Drop = 0;                // Voltage drop
-  unsigned long Raw;                      // Raw capacitance value
-  unsigned long Value;                    // Corrected capacitance value
+byte largeCap(Capacitors *cap) {
+  byte flag = 3;                          // Return value
+  byte tempByte;                          // Temp. value
+  byte mode;                              // Measurement mode
+  signed char scale;                      // Capacitance scale
+  unsigned int tempInt;                   // Temp. value
+  unsigned int pulses;                    // Number of charging pulses
+  unsigned int vZero;                    // Voltage before charging
+  unsigned int vCap;                     // Voltage of DUT
+  unsigned int vDrop = 0;                // Voltage drop
+  unsigned long raw;                      // Raw capacitance value
+  unsigned long value;                    // Corrected capacitance value
   boolean rerun;
 
   // Setup mode
-  Mode = FLAG_10MS | FLAG_PULLUP;         // Start with large caps
+  mode = FLAG_10MS | FLAG_PULLUP;         // Start with large caps
   do {
     rerun = false;                        // One-Time
 
 //     We charge the DUT with up to 500 pulses each 10ms long until the
-//     DUT reaches 300mV. The charging is done via Rl. This method is
+//     DUT reaches 300mV. The charging is done via rLow. This method is
 //     suitable for large capacitances from 47uF up to 100mF. If we find a
 //     lower capacitance we'll switch to 1ms charging pulses and try again
 //     (4.7µF up to 47µF).
@@ -2362,47 +2380,47 @@ byte LargeCap(Capacitor_Type *Cap) {
 //      The Analog Input Resistance of the ADC is 100MOhm typically.
 
     // Prepare probes
-    DischargeProbes();                    // Try to discharge probes
-    if(Check.Found == COMP_ERROR) return 0; // Skip on error
+    dischargeProbes();                    // Try to discharge probes
+    if(check.found == COMP_ERROR) return 0; // Skip on error
 
-    // Setup probes: Gnd -- probe 1 / probe 2 -- Rl -- Vcc
-    SetADCLow();                          // Set ADC port to low
-    ADC_DDR = Probes.Probe_2_ADC;         // Pull-down probe 2 directly
+    // Setup probes: Gnd -- probe 1 / probe 2 -- rLow -- Vcc
+    setAdcLow();                          // Set ADC port to low
+    ADC_DDR = probes.probe2Adc;         // Pull-down probe 2 directly
     R_PORT = 0;                           // Set resistor port to low
     R_DDR = 0;                            // Set resistor port to HiZ
-    U_Zero = ReadU(Probes.Pin_1);         // Get zero voltage (noise)
+    vZero = readVoltage(probes.pin1, 1);      // Get zero voltage (noise)
 
     // Charge DUT with up to 500 pulses until it reaches 300mV
-    Pulses = 0;
-    TempByte = 1;
-    while (TempByte) {
-      Pulses++;
-      PullProbe(Probes.R_low_1_mask, Mode); // Charging pulse
-      U_Cap = ReadU(Probes.Pin_1);        // Get voltage
-      U_Cap -= U_Zero;                    // Zero offset
+    pulses = 0;
+    tempByte = 1;
+    while (tempByte) {
+      pulses++;
+      pullProbe(probes.rLow1Mask, mode); // Charging pulse
+      vCap = readVoltage(probes.pin1, 1);     // Get voltage
+      vCap -= vZero;                    // Zero offset
 
       // End loop if charging is too slow
-      if((Pulses == 126) && (U_Cap < 75)) TempByte = 0;
+      if((pulses == 126) && (vCap < 75)) tempByte = 0;
 
       // End loop if 300mV are reached
-      if(U_Cap >= 300) TempByte = 0;
+      if(vCap >= 300) tempByte = 0;
 
       // End loop if maximum pulses are reached
-      if(Pulses == 500) TempByte = 0;
+      if(pulses == 500) tempByte = 0;
       wdt_reset();                        // Reset watchdog
     }
 
     // If 300mV are not reached DUT isn't a cap or much too large (>100mF)
     // we can ignore that for mid-sized caps
-    if(U_Cap < 300) Flag = 1;
+    if(vCap < 300) flag = 1;
 
     // If 1300mV are reached with one pulse we got a small cap
-    if((Pulses == 1) && (U_Cap > 1300)) {
-      if(Mode & FLAG_10MS) {              // <47µF
-        Mode = FLAG_1MS | FLAG_PULLUP;    // Set mode (1ms charging pulses)
+    if((pulses == 1) && (vCap > 1300)) {
+      if(mode & FLAG_10MS) {              // <47µF
+        mode = FLAG_1MS | FLAG_PULLUP;    // Set mode (1ms charging pulses)
         rerun = true;                     // And re-run
       } else {                            // <4.7µF
-        Flag = 2;
+        flag = 2;
       }
     }
   } while (rerun);
@@ -2411,96 +2429,96 @@ byte LargeCap(Capacitor_Type *Cap) {
 //    - run the same time as before minus the 10ms charging time
 //    - this gives us the approximation of the self-discharging
 
-  if(Flag == 3) {
+  if(flag == 3) {
     // Check self-discharging
-    TempInt = Pulses;
-    while (TempInt > 0) {
-      TempInt--;                          // Descrease timeout
-      U_Drop = ReadU(Probes.Pin_1);       // Get voltage
-      U_Drop -= U_Zero;                   // Zero offset
+    tempInt = pulses;
+    while (tempInt > 0) {
+      tempInt--;                          // Descrease timeout
+      vDrop = readVoltage(probes.pin1, 1);    // Get voltage
+      vDrop -= vZero;                   // Zero offset
       wdt_reset();                        // Reset watchdog
     }
 
     // Calculate voltage drop
-    if(U_Cap > U_Drop) U_Drop = U_Cap - U_Drop;
-    else U_Drop = 0;
+    if(vCap > vDrop) vDrop = vCap - vDrop;
+    else vDrop = 0;
 
     // If voltage drop is too large consider DUT not to be a cap
-    if(U_Drop > 100) Flag = 0;
+    if(vDrop > 100) flag = 0;
   }
 
 //   Calculate capacitance
-//    - use factor from pre-calculated LargeCap_table
-//    - ignore Config.CapZero since it's in the pF range
+//    - use factor from pre-calculated largeCapTable
+//    - ignore parameters.capZero since it's in the pF range
 
-  if(Flag == 3) {
-    Scale = -9;                           // Factor is scaled to nF
+  if(flag == 3) {
+    scale = -9;                           // Factor is scaled to nF
 
     // Get interpolated factor from table
-    Raw = GetFactor(U_Cap + U_Drop, TABLE_LARGE_CAP);
-    Raw *= Pulses;                        // C = pulses * factor
-    if(Mode & FLAG_10MS) Raw *= 10;       // *10 for 10ms charging pulses
-    if(Raw > UINT32_MAX / 1000) {         // Scale down if C >4.3mF
-      Raw /= 1000;                        // Scale down by 10^3
-      Scale += 3;                         // Add 3 to the exponent
+    raw = getFactor(vCap + vDrop, TABLE_LARGE_CAP);
+    raw *= pulses;                        // C = pulses * factor
+    if(mode & FLAG_10MS) raw *= 10;       // *10 for 10ms charging pulses
+    if(raw > UINT32_MAX / 1000) {         // scale down if C >4.3mF
+      raw /= 1000;                        // scale down by 10^3
+      scale += 3;                         // Add 3 to the exponent
     }
-    Value = Raw;                          // Copy raw value
+    value = raw;                          // Copy raw value
 
     // It seems that we got a systematic error
-    Value *= 100;
-    if(Mode & FLAG_10MS) Value /= 109;    // -9% for large cap
-    else Value /= 104;                    // -4% for mid cap
+    value *= 100;
+    if(mode & FLAG_10MS) value /= 109;    // -9% for large cap
+    else value /= 104;                    // -4% for mid cap
 
     // Copy data
-    Cap->A = Probes.Pin_2;                // Pull-down probe pin
-    Cap->B = Probes.Pin_1;                // Pull-up probe pin
-    Cap->Scale = Scale;                   // -9 or -6
-    Cap->Raw = Raw;
-    Cap->Value = Value;                   // Max. 4.3*10^6nF or 100*10^3µF
+    cap->a = probes.pin2;                // Pull-down probe pin
+    cap->b = probes.pin1;                // Pull-up probe pin
+    cap->scale = scale;                   // -9 or -6
+    cap->raw = raw;
+    cap->value = value;                   // Max. 4.3*10^6nF or 100*10^3µF
   }
-  return Flag;
+  return flag;
 }
 
 // Measure cap <4.7µF between two probe pins
-byte SmallCap(Capacitor_Type *Cap) {
-  byte Flag = 3;                          // Return value
-  byte TempByte;                          // Temp. value
-  signed char Scale;                      // Capacitance scale
-  unsigned int Ticks;                     // Timer counter
-  unsigned int Ticks2;                    // Timer overflow counter
-  unsigned int U_c;                       // Voltage of capacitor
-  unsigned long Raw;                      // Raw capacitance value
-  unsigned long Value;                    // Corrected capacitance value
+byte smallCap(Capacitors *cap) {
+  byte flag = 3;                          // Return value
+  byte tempByte;                          // Temp. value
+  signed char scale;                      // Capacitance scale
+  unsigned int ticks;                     // Timer counter
+  unsigned int ticks2;                    // Timer overflow counter
+  unsigned int vCap;                       // Voltage of capacitor
+  unsigned long raw;                      // Raw capacitance value
+  unsigned long value;                    // Corrected capacitance value
 
 //   Measurement method used for small caps < 50uF:
 //   We need a much better resolution for the time measurement. Therefore we
 //   use the µCs internal 16-bit counter and analog comparator. The counter
 //   inceases until the comparator detects that the voltage of the DUT is as
 //   high as the internal bandgap reference. To support the higher time
-//   resolution we use the Rh probe resistor for charging.
+//   resolution we use the RHigh probe resistor for charging.
 // 
 //   Remark:
 //   The analog comparator has an Input Leakage Current of -50nA up to 50nA
 //   at Vcc/2. The Input Offset is <10mV at Vcc/2.
 
-  Ticks2 = 0;                             // Reset timer overflow counter
+  ticks2 = 0;                             // Reset timer overflow counter
 
   // Init hardware, prepare probes
-  DischargeProbes();                      // Try to discharge probes
-  if(Check.Found == COMP_ERROR) return 0; // Skip on error
+  dischargeProbes();                      // Try to discharge probes
+  if(check.found == COMP_ERROR) return 0; // Skip on error
 
-  // Set probes: Gnd -- all probes / Gnd -- Rh -- probe-1
+  // Set probes: Gnd -- all probes / Gnd -- RHigh -- probe-1
   R_PORT = 0;                             // Set resistor port to low
 
   // Set ADC probe pins to output mode
   ADC_DDR = (1 << TP1) | (1 << TP2) | (1 << TP3);
-  SetADCLow();                            // Set ADC port to low
-  R_DDR = Probes.R_high_1_mask;           // Pull-down probe-1 via Rh
+  setAdcLow();                            // Set ADC port to low
+  R_DDR = probes.rHigh1Mask;           // Pull-down probe-1 via RHigh
 
   // Setup analog comparator
   ADCSRB = (1 << ACME);                   // Use ADC multiplexer as negative input
   ACSR =  (1 << ACBG) | (1 << ACIC);      // Use bandgap as positive input, trigger timer1
-  ADMUX = (1 << REFS0) | Probes.Pin_1;    // Switch ADC multiplexer to probe 1 and set AREF to Vcc
+  ADMUX = (1 << REFS0) | probes.pin1;    // Switch ADC multiplexer to probe 1 and set AREF to Vcc
   ADCSRA = ADC_CLOCK_DIV;                 // Disable ADC, but keep clock dividers
   delayMicroseconds(200);
 
@@ -2513,274 +2531,271 @@ byte SmallCap(Capacitor_Type *Cap) {
 
   // Clear all flags (input capture, compare A & B, overflow
   TIFR1 = (1 << ICF1) | (1 << OCF1B) | (1 << OCF1A) | (1 << TOV1);
-  R_PORT = Probes.R_high_1_mask;          // Pull-up probe-1 via Rh
+  R_PORT = probes.rHigh1Mask;          // Pull-up probe-1 via RHigh
 
   // Enable timer
-  if(Check.Found == COMP_FET) {
+  if(check.found == COMP_FET) {
     // Keep all probe pins pulled down but probe-1
-    TempByte = (((1 << TP1) | (1 << TP2) | (1 << TP3)) & ~(1 << Probes.Pin_1));
+    tempByte = (((1 << TP1) | (1 << TP2) | (1 << TP3)) & ~(1 << probes.pin1));
   } else {
-    TempByte = Probes.Probe_2_ADC;        // Keep just probe-1 pulled down
+    tempByte = probes.probe2Adc;        // Keep just probe-1 pulled down
   }
 
   // Start timer by setting clock prescaler (1/1 clock divider)
   TCCR1B = (1 << CS10);
-  ADC_DDR = TempByte;                     // Start charging DUT
+  ADC_DDR = tempByte;                     // Start charging DUT
 
   // Timer loop - run until voltage is reached - detect timer overflows
   while (1) {
-     TempByte = TIFR1;                    // Get timer1 flags
+     tempByte = TIFR1;                    // Get timer1 flags
 
      // End loop if input capture flag is set (= same voltage)
-     if(TempByte & (1 << ICF1)) break;
+     if(tempByte & (1 << ICF1)) break;
 
      // Detect timer overflow by checking the overflow flag
-     if(TempByte & (1 << TOV1)) {
+     if(tempByte & (1 << TOV1)) {
        // Happens at 65.536ms for 1MHz or 8.192ms for 8MHz
        TIFR1 = (1 << TOV1);               // Reset flag
        wdt_reset();                       // Reset watchdog
-       Ticks2++;                          // Increase overflow counter
+       ticks2++;                          // Increase overflow counter
 
        // End loop if charging takes too long (13.1s)
-       if(Ticks2 == (CPU_FREQ / 5000)) break;
+       if(ticks2 == (CPU_FREQ / 5000)) break;
      }
    }
 
   // Stop counter
   TCCR1B = 0;                             // Stop timer
   TIFR1 = (1 << ICF1);                    // Reset Input Capture flag
-  Ticks = ICR1;                           // Get counter value
+  ticks = ICR1;                           // Get counter value
 
   // Disable charging
   R_DDR = 0;                              // Set resistor port to HiZ mode
 
   // Catch missed timer overflow
-  if((TCNT1 > Ticks) && (TempByte & (1 << TOV1))) {
+  if((TCNT1 > ticks) && (tempByte & (1 << TOV1))) {
     TIFR1 = (1 << TOV1);                  // Reset overflow flag
-    Ticks2++;                             // Increase overflow counter
+    ticks2++;                             // Increase overflow counter
   }
 
   // Enable ADC again
   ADCSRA = (1 << ADEN) | (1 << ADIF) | ADC_CLOCK_DIV;
 
   // Get voltage of DUT
-  U_c = ReadU(Probes.Pin_1);              // Get voltage of cap
+  vCap = readVoltage(probes.pin1, 1);           // Get voltage of cap
 
   // Start discharging DUT
-  R_PORT = 0;                             // Pull down probe-2 via Rh
-  R_DDR = Probes.R_high_1_mask;           // Enable Rh for probe-1 again
+  R_PORT = 0;                             // Pull down probe-2 via RHigh
+  R_DDR = probes.rHigh1Mask;           // Enable RHigh for probe-1 again
 
   // Skip measurement if charging took too long
-  if(Ticks2 >= (CPU_FREQ / 5000)) Flag = 1;
+  if(ticks2 >= (CPU_FREQ / 5000)) flag = 1;
 
-  // Calculate capacitance (<50uF) - use factor from pre-calculated SmallCap_table
-  if(Flag == 3) {
+  // Calculate capacitance (<50uF) - use factor from pre-calculated smallCapTable
+  if(flag == 3) {
     // Combine both counter values
-    Raw = (unsigned long)Ticks;           // Set lower 16 bits
-    Raw |= (unsigned long)Ticks2 << 16;   // Set upper 16 bits
-    if(Raw > 2) Raw -= 2;                 // Subtract processing time overhead
-    Scale = -12;                          // Default factor is for pF scale
-    if(Raw > (UINT32_MAX / 1000)) {       // Prevent overflow (4.3*10^6)
-      Raw /= 1000;                        // Scale down by 10^3
-      Scale += 3;                         // Add 3 to the exponent (nF)
+    raw = (unsigned long)ticks;           // Set lower 16 bits
+    raw |= (unsigned long)ticks2 << 16;   // Set upper 16 bits
+    if(raw > 2) raw -= 2;                 // Subtract processing time overhead
+    scale = -12;                          // Default factor is for pF scale
+    if(raw > (UINT32_MAX / 1000)) {       // Prevent overflow (4.3*10^6)
+      raw /= 1000;                        // scale down by 10^3
+      scale += 3;                         // Add 3 to the exponent (nF)
     }
 
     // Multiply with factor from table
-    Raw *= GetFactor(Config.U_Bandgap + Config.CompOffset, TABLE_SMALL_CAP);
+    raw *= getFactor(parameters.vBandgap + parameters.compOffset, TABLE_SMALL_CAP);
 
     // Divide by CPU frequency to get the time and multiply with table scale
-    Raw /= (CPU_FREQ / 10000);
-    Value = Raw;                          // Take raw value
+    raw /= (CPU_FREQ / 10000);
+    value = raw;                          // Take raw value
 
     // Take care about zero offset if feasable
-    if(Scale == -12) {                    // pF scale
-      if(Value >= Config.CapZero) {       // If value is larger than offset
-        Value -= Config.CapZero;          // Substract offset
-      } else {                              // If value is smaller than offset
+    if(scale == -12) {                    // pF scale
+      if(value >= parameters.capZero) {       // If value is larger than offset
+        value -= parameters.capZero;          // Substract offset
+      } else {                            // If value is smaller than offset
         // We have to prevent a negative value
-        Value = 0;                        // Set value to 0
+        value = 0;                        // Set value to 0
       }
     }
 
     // Copy data
-    Cap->A = Probes.Pin_2;                // Pull-down probe pin
-    Cap->B = Probes.Pin_1;                // Pull-up probe pin
-    Cap->Scale = Scale;                   // -12 or -9
-    Cap->Raw = Raw;
-    Cap->Value = Value;                   // Max. 5.1*10^6pF or 125*10^3nF
+    cap->a = probes.pin2;                // Pull-down probe pin
+    cap->b = probes.pin1;                // Pull-up probe pin
+    cap->scale = scale;                   // -12 or -9
+    cap->raw = raw;
+    cap->value = value;                   // Max. 5.1*10^6pF or 125*10^3nF
 
 //     Self-adjust the voltage offset of the analog comparator and internal
 //     bandgap reference if C is 100nF up to 20µF. The minimum of 100nF
 //     should keep the voltage stable long enough for the measurements.
 //     Changed offsets will be used in next test run.
 
-    if(Scale == -12 && Value >= 100000 || Scale == -9 && Value <= 20000) {
-      signed int              Offset;
-      signed long             TempLong;
+    if(scale == -12 && value >= 100000 || scale == -9 && value <= 20000) {
+      signed int              offset;
+      signed long             tempLong;
 
 //       We can self-adjust the offset of the internal bandgap reference
 //       by measuring a voltage lower than the bandgap reference, one time
 //       with the bandgap as reference and a second time with Vcc as
 //       reference. The common voltage source is the cap we just measured.
 
-       while (ReadU(Probes.Pin_1) > 980); // Keep discharging
+       while (readVoltage(probes.pin1, 1) > 980); // Keep discharging
        R_DDR = 0;                         // Stop discharging
-       Config.AutoScale = 0;              // Disable auto scaling
-       Ticks = ReadU(Probes.Pin_1);       // U_c with Vcc reference
-       Config.AutoScale = 1;              // Enable auto scaling again
-       Ticks2 = ReadU(Probes.Pin_1);      // U_c with bandgap reference
-       R_DDR = Probes.R_high_1_mask;      // Resume discharging
-       Offset = Ticks - Ticks2;
+       ticks = readVoltage(probes.pin1, 0);    // vCap with Vcc reference
+       ticks2 = readVoltage(probes.pin1, 1);   // vCap with bandgap reference
+       R_DDR = probes.rHigh1Mask;      // Resume discharging
+       offset = ticks - ticks2;
 
        // Allow some offset caused by the different voltage resolutions (4.88 vs. 1.07)
-       if((Offset < -4) || (Offset > 4)) { // Offset too large
+       if((offset < -4) || (offset > 4)) { // Offset too large
 
 //          Calculate total offset:
-//           - first get offset per mV: Offset / U_c
-//           - total offset for U_ref: (Offset / U_c) * U_ref
+//           - first get offset per mV: Offset / vCap
+//           - total offset for vRef: (Offset / vCap) * vRef
 
-         TempLong = Offset;
-         TempLong *= Config.U_Bandgap;    // * U_ref
-         TempLong /= Ticks2;              // / U_c
-         Config.RefOffset = (signed char)TempLong;
+         tempLong = offset;
+         tempLong *= parameters.vBandgap;    // * vRef
+         tempLong /= ticks2;              // / vCap
+         parameters.refOffset = (signed char)tempLong;
        }
 
 //       In the cap measurement above the analog comparator compared
 //       the voltages of the cap and the bandgap reference. Since the µC
 //       has an internal voltage drop for the bandgap reference the
-//       µC used actually U_bandgap - U_offset. We get that offset by
+//       µC used actually vbandgap - voffset. We get that offset by
 //       comparing the bandgap reference with the voltage of the cap:
-//       U_c = U_bandgap - U_offset -> U_offset = U_c - U_bandgap
+//       vCap = vbandgap - voffset -> voffset = vCap - vbandgap
 
-      Offset = U_c - Config.U_Bandgap;
+      offset = vCap - parameters.vBandgap;
       // Limit offset to a valid range of -50mV - 50mV
-      if((Offset > -50) && (Offset < 50)) Config.CompOffset = Offset;
+      if((offset > -50) && (offset < 50)) parameters.compOffset = offset;
     }
   }
-  return Flag;
+  return flag;
 }
 
 // Measure capacitance between two probe pins
-void MeasureCap(byte Probe1, byte Probe2, byte ID) {
-  byte TempByte;                          // Temp. value
-  Capacitor_Type *Cap;                    // Pointer to cap data structure
-  Diode_Type *Diode;                      // Pointer to diode data structure
-  Resistor_Type *Resistor;                // Pointer to resistor data structure
+void measureCap(byte probe1, byte probe2, byte id) {
+  byte tempByte;                          // Temp. value
+  Capacitors *cap;                    // Pointer to cap data structure
+  Diodes *diode;                      // Pointer to diode data structure
+  Resistors *resistor;                // Pointer to resistor data structure
 
   // Init - Reset cap data
-  Cap = &Caps[ID];
-  Cap->A = 0;
-  Cap->B = 0;
-  Cap->Scale = -12;                       // pF by default
-  Cap->Raw = 0;
-  Cap->Value = 0;
-  if(Check.Found == COMP_ERROR) return;   // Skip check on any error
+  cap = &caps[id];
+  cap->a = 0;
+  cap->b = 0;
+  cap->scale = -12;                       // pF by default
+  cap->raw = 0;
+  cap->value = 0;
+  if(check.found == COMP_ERROR) return;   // Skip check on any error
 
   // Skip resistors - But check for a resistor < 10 Ohm. Might be a large cap.
-  if(Check.Found == COMP_RESISTOR) {
-    Resistor = &Resistors[0];             // Pointer to first resistor
-    TempByte = 0;
-    while (TempByte < Check.Resistors) {
+  if(check.found == COMP_RESISTOR) {
+    resistor = &resistors[0];             // Pointer to first resistor
+    tempByte = 0;
+    while (tempByte < check.resistors) {
       // Got matching pins
-      if(((Resistor->A == Probe1) && (Resistor->B == Probe2)) ||
-          ((Resistor->A == Probe2) && (Resistor->B == Probe1))) {
+      if(((resistor->a == probe1) && (resistor->b == probe2)) ||
+          ((resistor->a == probe2) && (resistor->b == probe1))) {
 
         // Check for low value
-        if(CmpValue(Resistor->Value, Resistor->Scale, 10UL, 0) == -1)
-          TempByte = 99;                  // Signal low resistance and end loop
+        if(cmpValue(resistor->value, resistor->scale, 10UL, 0) == -1)
+          tempByte = 99;                  // Signal low resistance and end loop
       }
-      TempByte++;                         // Next one
-      Resistor++;                         // Next one
+      tempByte++;                         // Next one
+      resistor++;                         // Next one
     }
 
     // We got a valid resistor
-    if(TempByte != 100) return;           // Skip this one
+    if(tempByte != 100) return;           // Skip this one
   }
 
 //   Skip measurement for "dangerous" diodes
 //    - when Vf collides with the voltage of the capacitance measurement
 
-  Diode = &Diodes[0];                     // Pointer to first diode
-  for (TempByte = 0; TempByte < Check.Diodes; TempByte++) {
+  diode = &diodes[0];                     // Pointer to first diode
+  for (tempByte = 0; tempByte < check.diodes; tempByte++) {
     // Got matching pins and low threshold voltage
-    if((Diode->C == Probe2) && (Diode->A == Probe1) && (Diode->V_f < 1500)) return;
-    Diode++;                              // Next one
+    if((diode->c == probe2) && (diode->a == probe1) && (diode->vF < 1500)) return;
+    diode++;                              // Next one
   }
 
   // Run measurements
-  UpdateProbes(Probe1, Probe2, 0);        // Update bitmasks and probes
+  updateProbes(probe1, probe2, 0);        // Update bitmasks and probes
 
   // First run measurement for large caps
-  TempByte = LargeCap(Cap);
+  tempByte = largeCap(cap);
 
   // If cap is too small run measurement for small caps
-  if(TempByte == 2) TempByte = SmallCap(Cap);
+  if(tempByte == 2) tempByte = smallCap(cap);
 
   // Check for plausibility
   // If there aren't any diodes in reverse direction which could be detected as capacitors by mistake
-  if(Check.Diodes == 0) {
+  if(check.diodes == 0) {
     // Low resistance might be a large cap
-    if(Check.Found == COMP_RESISTOR) {
+    if(check.found == COMP_RESISTOR) {
       // Report capacitor for large C (> 4.3µF)
-      if(Cap->Scale >= -6) Check.Found = COMP_CAPACITOR;
+      if(cap->scale >= -6) check.found = COMP_CAPACITOR;
     // We consider values below 5pF being just ghosts
-    } else if((Cap->Scale > -12) || (Cap->Value >= 5UL)) {
-      Check.Found = COMP_CAPACITOR;       // Report capacitor
+    } else if((cap->scale > -12) || (cap->value >= 5UL)) {
+      check.found = COMP_CAPACITOR;       // Report capacitor
     }
   }
 
   // Clean up
-  DischargeProbes();                      // Discharge DUT
-
+  dischargeProbes();                      // Discharge DUT
   // Reset all ports and pins
-  SetADCHiz();                            // Set ADC port to input
-  SetADCLow();                            // Set ADC port low
+  setAdcHighZ();                            // Set ADC port to input
+  setAdcLow();                            // Set ADC port low
   R_DDR = 0;                              // Set resistor port to input
   R_PORT = 0;                             // Set resistor port low
 }
 
 // Measure inductance between two probe pins
-byte MeasureInductance(uint32_t *Time, byte Mode) {
-  byte Flag = 3;                          // Return value
-  byte Test;                              // Test flag
-  signed char Offset;                     // Counter offet
-  unsigned int Ticks_L;                   // Timer counter
-  unsigned int Ticks_H;                   // Timer overflow counter
-  unsigned long Counter;                  // Counter
+byte measureInductance(uint32_t *time, byte mode) {
+  byte flag = 3;                          // Return value
+  byte test;                              // Test flag
+  signed char offset;                     // Counter offet
+  unsigned int ticksLow;                   // Timer counter
+  unsigned int ticksHigh;                   // Timer overflow counter
+  unsigned long cnt;                  // Counter
 
   // Sanity check
-  if(Time == NULL) return 0;
-  DischargeProbes();                      // Try to discharge probes
-  if(Check.Found == COMP_ERROR) return 0;
+  if(time == NULL) return 0;
+  dischargeProbes();                      // Try to discharge probes
+  if(check.found == COMP_ERROR) return 0;
 
 //   Measurement modes:
-//    - low current: Gnd -- Rl -- probe-2 / probe-1 -- Vcc
+//    - low current: Gnd -- rLow -- probe-2 / probe-1 -- Vcc
 //    - high current: Gnd -- probe-2 / probe-1 -- Vcc
 
 //   init hardware
 
-  // Set probes: Gnd -- probe-1 / Gnd -- Rl -- probe-2
+  // Set probes: Gnd -- probe-1 / Gnd -- rLow -- probe-2
   R_PORT = 0;                             // Set resistor port to low
-  SetADCLow();                            // Set ADC port to low
-  if(Mode & MODE_LOW_CURRENT) {           // Low current
-    R_DDR = Probes.R_low_2_mask;          // Pull down probe-2 via Rl
-    ADC_DDR = Probes.Probe_1_ADC;         // Pull down probe-1 directly
+  setAdcLow();                            // Set ADC port to low
+  if(mode & MODE_LOW_CURRENT) {           // Low current
+    R_DDR = probes.rLow2Mask;          // Pull down probe-2 via rLow
+    ADC_DDR = probes.probe1Adc;         // Pull down probe-1 directly
   } else  {                               // High current
     R_DDR = 0;                            // Disable probe resistors
 
     // Pull down probe-1 and probe-2 directly
-    ADC_DDR = Probes.Probe_1_ADC | Probes.Probe_2_ADC;
+    ADC_DDR = probes.probe1Adc | probes.probe2Adc;
   }
 
   // Setup analog comparator
   ADCSRB = (1 << ACME);                   // Use ADC multiplexer as negative input
   ACSR =  (1 << ACBG) | (1 << ACIC);      // Use bandgap as positive input, trigger timer1
-  ADMUX = (1 << REFS0) | Probes.Pin_2;    // Switch ADC multiplexer to probe-2 and set AREF to Vcc
+  ADMUX = (1 << REFS0) | probes.pin2;    // Switch ADC multiplexer to probe-2 and set AREF to Vcc
   ADCSRA = ADC_CLOCK_DIV;                 // Disable ADC, but keep clock dividers
   delayMicroseconds(200);                 // Allow bandgap reference to settle
 
   // Setup timer
-  Ticks_H = 0;                            // Reset timer overflow counter
+  ticksHigh = 0;                            // Reset timer overflow counter
   TCCR1A = 0;                             // Set default mode
   TCCR1B = 0;                             // Set more timer modes
 
@@ -2789,45 +2804,45 @@ byte MeasureInductance(uint32_t *Time, byte Mode) {
 
   // Clear all flags (input capture, compare A & B, overflow
   TIFR1 = (1 << ICF1) | (1 << OCF1B) | (1 << OCF1A) | (1 << TOV1);
-  if(Mode & MODE_DELAYED_START) {         // Delayed start
-    Test = (CPU_FREQ / 1000000);          // Cycles per µs
+  if(mode & MODE_DELAYED_START) {         // Delayed start
+    test = (CPU_FREQ / 1000000);          // Cycles per µs
 
-    // Change probes: Gnd -- Rl -- probe-2 / probe-1 -- Vcc
-    ADC_PORT = Probes.Probe_1_ADC;        // Pull up probe-1 directly
+    // Change probes: Gnd -- rLow -- probe-2 / probe-1 -- Vcc
+    ADC_PORT = probes.probe1Adc;        // Pull up probe-1 directly
 
 //     Delay timer by about 3-4µs to skip capacitive effects of large inductors
 //      - a single loop needs 4 cycles, the last loop run just 3
 //      - cycles burnt: <MCU cycles per µs> * 4 - 1
 
-    while (Test > 0) {
-      Test--;
+    while (test > 0) {
+      test--;
       asm volatile("nop\n\t"::);
     }
     TCCR1B |= (1 << CS10);                // Start timer (1/1 clock divider)
   } else {                                // Immediate start
     TCCR1B |= (1 << CS10);                // Start timer (1/1 clock divider)
 
-    // Change probes: Gnd -- Rl -- probe-2 / probe-1 -- Vcc
-    ADC_PORT = Probes.Probe_1_ADC;        // Pull up probe-1 directly
+    // Change probes: Gnd -- rLow -- probe-2 / probe-1 -- Vcc
+    ADC_PORT = probes.probe1Adc;        // Pull up probe-1 directly
   }
 
   // Timer loop - run until voltage threshold is reached - detect timer overflows
    while (1) {
-     Test = TIFR1;                        // Get timer1 flags
+     test = TIFR1;                        // Get timer1 flags
 
      // End loop if input capture flag is set (= same voltage)
-     if(Test & (1 << ICF1)) break;
+     if(test & (1 << ICF1)) break;
 
      // Detect timer overflow by checking the overflow flag
-     if(Test & (1 << TOV1)) {
+     if(test & (1 << TOV1)) {
        // Happens at 65.536ms for 1MHz or 8.192ms for 8MHz
        TIFR1 = (1 << TOV1);               // Reset flag
        wdt_reset();                       // Reset watchdog
-       Ticks_H++;                         // Increase overflow counter
+       ticksHigh++;                         // Increase overflow counter
 
        // If it takes too long (0.26s)
-       if(Ticks_H == (CPU_FREQ / 250000)) {
-         Flag = 0;                        // Signal timeout
+       if(ticksHigh == (CPU_FREQ / 250000)) {
+         flag = 0;                        // Signal timeout
          break;                           // End loop
        }
      }
@@ -2836,74 +2851,69 @@ byte MeasureInductance(uint32_t *Time, byte Mode) {
   // Stop counter
   TCCR1B = 0;                             // Stop timer
   TIFR1 = (1 << ICF1);                    // Reset Input Capture flag
-  Ticks_L = ICR1;                         // Get counter value
+  ticksLow = ICR1;                         // Get counter value
 
-  // Prepare cut off: Gnd -- Rl -- probe-2 / probe-1 -- Rl -- Gnd
-  R_DDR = Probes.R_low_2_mask | Probes.R_low_1_mask;
+  // Prepare cut off: Gnd -- rLow -- probe-2 / probe-1 -- rLow -- Gnd
+  R_DDR = probes.rLow2Mask | probes.rLow1Mask;
 
   // Stop current flow
-  SetADCHiz();
+  setAdcHighZ();
 
   // Catch missed timer overflow
-  if((TCNT1 > Ticks_L) && (Test & (1 << TOV1))) {
+  if((TCNT1 > ticksLow) && (test & (1 << TOV1))) {
     TIFR1 = (1 << TOV1);                  // Reset overflow flag
-    Ticks_H++;                            // Increase overflow counter
+    ticksHigh++;                            // Increase overflow counter
   }
 
   // Enable ADC again
   ADCSRA = (1 << ADEN) | (1 << ADIF) | ADC_CLOCK_DIV;
 
   // Process counters, combine both counter values
-  Counter = (unsigned long)Ticks_L;       // Lower 16 bits
-  Counter |= (unsigned long)Ticks_H << 16; // Upper 16 bits
-  Offset = -4;                            // Subtract processing overhead
-  if(Mode & MODE_DELAYED_START) {         // Delayed start
+  cnt = (unsigned long) ticksLow;       // Lower 16 bits
+  cnt |= (unsigned long) ticksHigh << 16; // Upper 16 bits
+  offset = -4;                            // Subtract processing overhead
+  if(mode & MODE_DELAYED_START) {         // Delayed start
     // Add MCU cycles for delayed start
-    Offset += ((CPU_FREQ / 1000000) * 4) - 1;
+    offset += ((CPU_FREQ / 1000000) * 4) - 1;
   } else {                                // Immediate start
-    Offset -= 1;                          // Timer started one cycle too early
+    offset -= 1;                          // Timer started one cycle too early
   }
-  if(Offset >= 0) {                       // Positive offet
-    Counter += Offset;
+  if(offset >= 0) {                       // Positive offet
+    cnt += offset;
   } else {                                // Negative offset
-    Offset *= -1;                         // Make it positive
-    if(Counter < Offset) Counter = 0;     // Prevent underflow
-    else Counter -= Offset;               // Subtract offset
+    offset *= -1;                         // Make it positive
+    if(cnt < offset) cnt = 0;     // Prevent underflow
+    else cnt -= offset;               // Subtract offset
   }
-
-  // Convert counter (MCU cycles) to time (in µs)
-  // Serial.println(Counter);
-  if(Counter > 0) {
-    Counter += (CPU_FREQ / 2000000);      // Add half of cycles for rounding
-    Counter /= (CPU_FREQ / 1000000);      // Divide by frequency and scale to µs
+  if(cnt > 0) {
+    cnt += (CPU_FREQ / 2000000);      // Add half of cycles for rounding
+    cnt /= (CPU_FREQ / 1000000);      // Divide by frequency and scale to µs
   }
-
-  // Serial.println(Counter);
-  if(Counter <= 1) Flag = 2;              // Signal inductance too low
-  *Time = Counter;                        // Save time
-  return Flag;
+  if(cnt <= 1) flag = 2;              // Signal inductance too low
+  *time = cnt;                        // Save time
+  return flag;
 }
 
 // Measure inductance between two probe pins of a resistor
-byte MeasureInductor(Resistor_Type *Resistor) {
-  byte Test = 0;                          // Return value / measurement result
-  byte Mode;                              // Measurement mode
-  byte Scale;                             // Scale of value
-  unsigned int R_total;                   // Total resistance
-  unsigned int Factor;                    // Factor
-  unsigned long Value;                    // Value
-  unsigned long Time1;                    // Time #1
-  unsigned long Time2;                    // Time #2
+byte measureInductor(Resistors *resistor) {
+  byte test = 0;                          // Return value / measurement result
+  byte mode;                              // Measurement mode
+  byte scale;                             // scale of value
+  unsigned int rTotal;                   // Total resistance
+  unsigned int factor;                    // Factor
+  unsigned long value;                    // value
+  unsigned long time1;                    // Time #1
+  unsigned long time2;                    // Time #2
 
   // Reset data
-  Inductor.Scale = 0;
-  Inductor.Value = 0;
+  inductor.scale = 0;
+  inductor.value = 0;
 
   // Sanity check
-  if(Resistor == NULL) return Test;
+  if(resistor == NULL) return test;
 
   // Limit resistor to 2k (feasibilty & prevent variable overflow)
-  if(CmpValue(Resistor->Value, Resistor->Scale, 2000, 0) >= 0) return Test;
+  if(cmpValue(resistor->value, resistor->scale, 2000, 0) >= 0) return test;
 
 //   Manage measurements:
 //    - run in immediate and delayed mode to deal with capacitive effects
@@ -2911,66 +2921,66 @@ byte MeasureInductor(Resistor_Type *Resistor) {
 //    - in case of a small inductance run in high current mode (implies
 //      immediate mode only)
 
-  UpdateProbes(Resistor->A, Resistor->B, 0); // Update probes
-  Mode = MODE_LOW_CURRENT;
-  Test = MeasureInductance(&Time1, Mode);
-  if(Test == 2) {                         // Inductance too low
+  updateProbes(resistor->a, resistor->b, 0); // Update probes
+  mode = MODE_LOW_CURRENT;
+  test = measureInductance(&time1, mode);
+  if(test == 2) {                         // Inductance too low
     // If resistance < 40 Ohms we may run the high current test
-    if(CmpValue(Resistor->Value, Resistor->Scale, 40, 0) < 0) {
-      Mode = MODE_HIGH_CURRENT;
-      Test = MeasureInductance(&Time1, Mode);
+    if(cmpValue(resistor->value, resistor->scale, 40, 0) < 0) {
+      mode = MODE_HIGH_CURRENT;
+      test = measureInductance(&time1, mode);
     }
-  } else if(Test == 3) {                  // Valid time
+  } else if(test == 3) {                  // Valid time
     // Let's run the delayed mode
-    Mode = MODE_LOW_CURRENT | MODE_DELAYED_START;
-    Test = MeasureInductance(&Time2, Mode);
-    if(Time1 > Time2) Time1 = Time2;      // Lower value wins
+    mode = MODE_LOW_CURRENT | MODE_DELAYED_START;
+    test = measureInductance(&time2, mode);
+    if(time1 > time2) time1 = time2;      // Lower value wins
   }
-  if(Test != 3) Test = 0;                 // Measurements failed
+  if(test != 3) test = 0;                 // Measurements failed
   // Calculate inductance
-  if(Test == 3) {
+  if(test == 3) {
     // Resistances - Total resistance (in 0.1 Ohms) - R_L
-    R_total = RescaleValue(Resistor->Value, Resistor->Scale, -1);
-    R_total += Config.RiH + Config.RiL;
+    rTotal = RescaleValue(resistor->value, resistor->scale, -1);
+    rTotal += parameters.rIntHigh + parameters.rIntLow;
 
     // Shunt resistance (in 0.1 Ohms)
-    Factor = Config.RiL;
-    if(Mode & MODE_LOW_CURRENT) {         // Low current measurement mode
+    factor = parameters.rIntLow;
+    if(mode & MODE_LOW_CURRENT) {         // Low current measurement mode
       // Add R_l
-      R_total += (R_LOW * 10);
-      Factor += (R_LOW * 10);
+      rTotal += (R_LOW * 10);
+      factor += (R_LOW * 10);
     }
 
 //     Ratio and factor
-//      - ratio = ((U_ref * R_total) / (5V * R_shunt)) * 10^3
+//      - ratio = ((vRef * rTotal) / (5V * R_shunt)) * 10^3
 
-    Value = Config.U_Bandgap + Config.CompOffset;
-    Value *= R_total;                     // * R_total (in 0.1 Ohms)
-    Value /= Factor;                      // / R_shunt (in 0.1 Ohms)
-    Value /= 5;                           // / 5000mV, * 10^3
+    value = parameters.vBandgap + parameters.compOffset;
+    value *= rTotal;                     // * rTotal (in 0.1 Ohms)
+    value /= factor;                      // / R_shunt (in 0.1 Ohms)
+    value /= 5;                           // / 5000mV, * 10^3
 
     // Get ratio based factor
-    Factor = GetFactor((unsigned int)Value, TABLE_INDUCTOR);
+    factor = getFactor((unsigned int)value, TABLE_INDUCTOR);
 
 //    calculate inductance
-//    L = t_stop * R_total * factor
+//    L = t_stop * rTotal * factor
 
-    Scale = -6;                           // µH by default
-    Value = Time1;                        // t_stop
-    Value *= Factor;                      // * factor (µs * 10^-3)
-    while (Value > 100000) {              // Re-scale to prevent overflow
-      Value /= 10;
-      Scale++;
+    scale = -6;                           // µH by default
+    value = time1;                        // t_stop
+    value *= factor;                      // * factor (µs * 10^-3)
+    while (value > 100000) {              // Re-scale to prevent overflow
+      value /= 10;
+      scale++;
     }
-    Value *= R_total;                     // * R_total (in 0.1 Ohms)
-    Value /= 10000;
+    value *= rTotal;                     // * rTotal (in 0.1 Ohms)
+    value /= 10000;
     // Update data
-    Inductor.Scale = Scale;
-    Inductor.Value = Value;
+    inductor.scale = scale;
+    inductor.value = value;
     // Serial.println("Success");
-    Test = 1;                             // Signal success
+    test = 1;                             // Signal success
   }
-  return Test;
+  return test;
 }
 
 // Clear single line of display
@@ -2983,97 +2993,97 @@ void lcd_clear_line(unsigned char l) {
 }
 
 // Write probe pin number to the LCD
-void lcd_testpin(unsigned char Probe) {
+void lcd_testpin(unsigned char probe) {
   // Since TP1 is 0 we simply add the value to '1'
-  lcd.write('1' + Probe);                 // Send data
+  lcd.write('1' + probe);                 // Send data
 }
 
 // LINT to here
 
 // Display value and unit
-void DisplayValue(unsigned long Value, signed char Exponent, unsigned char Unit) {
-  unsigned char Prefix = 0;               // Prefix character
-  byte Offset = 0;                        // Exponent offset to next 10^3 step
-  byte Index;                             // Index ID
+void displayValue(unsigned long value, signed char Exponent, unsigned char Unit) {
+  unsigned char prefix = 0;               // Prefix character
+  byte offset = 0;                        // Exponent offset to next 10^3 step
+  byte index;                             // Index id
   byte Length;                            // String length
 
-  // Scale value down to 4 digits
-  while (Value >= 1000) {
-    Value += 5;                           // For automagic rounding
-    Value /= 10;                          // Scale down by 10^1
+  // scale value down to 4 digits
+  while (value >= 1000) {
+    value += 5;                           // For automagic rounding
+    value /= 10;                          // scale down by 10^1
     Exponent++;                           // Increase exponent by 1
   }
 
   // Determine prefix and offset (= number of digits right of dot)
   if(Exponent >= -12) {                   // Prevent index underflow
     Exponent += 12;                       // Shift exponent to be >= 0
-    Index = Exponent / 3;                 // Number of 10^3 steps
-    Offset = Exponent % 3;                // Offset to lower 10^3 step
-    if(Offset > 0) {                      // Dot required
-      Index++;                            // Upscale prefix
-      Offset = 3 - Offset;                // Reverse value (1 or 2)
+    index = Exponent / 3;                 // Number of 10^3 steps
+    offset = Exponent % 3;                // Offset to lower 10^3 step
+    if(offset > 0) {                      // Dot required
+      index++;                            // Upscale prefix
+      offset = 3 - offset;                // Reverse value (1 or 2)
     }
     // Look up prefix in table (also prevent array overflow)
-    if(Index <= 6) Prefix = Prefix_table[Index];
+    if(index <= 6) prefix = prefixTable[index];
   }
 
   // Display value, convert value into string
-  utoa((unsigned int)Value, OutBuffer, 10);
-  Length = strlen(OutBuffer);
+  utoa((unsigned int)value, outBuffer, 10);
+  Length = strlen(outBuffer);
 
   // We misuse Exponent for the dot position
-  Exponent = Length - Offset;             // Calculate position
+  Exponent = Length - offset;             // Calculate position
   if(Exponent <= 0) {                     // We have to prepend "0."
     // 0: factor 10 / -1: factor 100
     lcd.write('0');
     lcd.write('.');
     if(Exponent < 0) lcd.write('0');      // Extra 0 for factor 100
   }
-  if(Offset == 0) Exponent = -1;          // Disable dot if not needed
+  if(offset == 0) Exponent = -1;          // Disable dot if not needed
 
   // Adjust position to match array or disable dot if set to 0
   Exponent--;
 
   // Display value and add dot if requested
-  Index = 0;
-  while (Index < Length) {                // Loop through string
-    lcd.write(OutBuffer[Index]);          // Display char
-    if(Index == Exponent) lcd.write('.'); // Display dot
-    Index++;                              // Next one
+  index = 0;
+  while (index < Length) {                // Loop through string
+    lcd.write(outBuffer[index]);          // Display char
+    if(index == Exponent) lcd.write('.'); // Display dot
+    index++;                              // Next one
   }
   // Display prefix and unit
-  if(Prefix) lcd.write(Prefix);
+  if(prefix) lcd.write(prefix);
   if(Unit) lcd.write(Unit);
 }
 
 // Display signed value and unit
-void DisplaySignedValue(signed long Value, signed char Exponent, unsigned char Unit) {
+void displaySignedValue(signed long value, signed char Exponent, unsigned char Unit) {
   // Take care about sign
-  if(Value < 0) {                         // Negative value
+  if(value < 0) {                         // Negative value
     lcd.write('-');                       // Display: "-"
-    Value = -Value;                       // Make value positive
+    value = -value;                       // Make value positive
   }
   // And display unsigned value
-  DisplayValue((signed long)Value, Exponent, Unit);
+  displayValue((signed long)value, Exponent, Unit);
 }
 
 // Tell user to create or remove short-circuit of all three probes
-void ShortCircuit(byte Mode) {
+void ShortCircuit(byte mode) {
   byte Run = 0;                           // Loop control
-  byte Test;                              // Test feedback
+  byte test;                              // Test feedback
   byte d = 0;
-  Test = AllProbesShorted();              // Get current status
-  if(Mode == 0) {                         // Remove short
+  test = allProbesShorted();              // Get current status
+  if(mode == 0) {                         // Remove short
     // Some shorted
-    if(Test != 0) d = 1;
+    if(test != 0) d = 1;
   } else {                                // Create short
     // Some unshorted
-    if(Test != 3) d = 1;
+    if(test != 3) d = 1;
   }
   // If required tell user what to do
   if(d) {
     lcd_clear();
-    if(Mode == 0) {                       // Remove short
+    if(mode == 0) {                       // Remove short
       lcd.print(F("Remove"));
     } else {                              // Create short
       lcd.print(F("Create"));
@@ -3084,11 +3094,11 @@ void ShortCircuit(byte Mode) {
   }
   // Wait until all probes are dis/connected
   while (Run == 1) {
-    Test = AllProbesShorted();            // Check for short circuits
-    if(Mode == 0) {                       // Remove short
-      if(Test == 0) Run = 0;              // End loop if all removed
+    test = allProbesShorted();            // Check for short circuits
+    if(mode == 0) {                       // Remove short
+      if(test == 0) Run = 0;              // End loop if all removed
     } else {                              // Create short
-      if(Test == 3) Run = 0;              // End loop if all shorted
+      if(test == 3) Run = 0;              // End loop if all shorted
     }
     if(Run == 1)                          // If not done yet
       delay(50);                          // Wait a little bit
@@ -3098,7 +3108,7 @@ void ShortCircuit(byte Mode) {
 }
 
 // Detect keypress of test push button
-byte TestKey() {
+byte testKey() {
   byte i;
 
   if(gogohut) {
@@ -3109,100 +3119,102 @@ byte TestKey() {
       delay(1000);
       gogohut = 0;
       return 0;
+    } else {
+      delay(500);
+      return 1;
     }
-    return 1;
   }
   for(;;) {
-    i = Test.timeup();
+    i = testButton.timeup();
     if(!i) {
       delay(10);
       continue;
     }
-    if(i >= LONG_LONG_PRESS) return 2;
-    else if(i >= LONG_PRESS) gogohut = 1;
+    if(i >= SEC5_PRESS) return 2;
+    else if(i >= SEC1_PRESS) gogohut = 1;
     return 1;
   }
 }
 
 // Show failed test
-void ShowFail(void) {
+void showFail(void) {
   // Display info
   lcd.print(F("No or O/C device"));                 // Display: No component
 }
 
 // Show Error                             //Only for Standalone Version!
-void ShowError() {
-  if(Check.Type == TYPE_DISCHARGE)        // Discharge failed
+void showError() {
+  if(check.type == TYPE_DISCHARGE)        // Discharge failed
   {
     lcd.print("Battery?");             // Display: Battery?
 
     // Display probe number and remaining voltage
     lcd_setcursor(0, 2);
-    lcd_testpin(Check.Probe);
+    lcd_testpin(check.probe);
     lcd.write(':');
     lcd.write(' ');
-    DisplayValue(Check.U, -3, 'V');
+    displayValue(check.v, -3, 'V');
   }
 }
 
 // Display Uf of a diode
-void ShowDiode_Uf(Diode_Type *Diode) {
+void showDiode_Uf(Diodes *diode) {
   // Sanity check
-  if(Diode == NULL) return;
+  if(diode == NULL) return;
 
   // Display Vf
-  DisplayValue(Diode->V_f, -3, 'V');
+  displayValue(diode->vF, -3, 'V');
 }
 
 // Display capacitance of a diode
-void ShowDiode_C(Diode_Type *Diode) {
+void showDiode_C(Diodes *diode) {
   // Sanity check
-  if(Diode == NULL) return;
+  if(diode == NULL) return;
 
   // Get capacitance (opposite of flow direction)
-  MeasureCap(Diode->C, Diode->A, 0);
+  measureCap(diode->c, diode->a, 0);
 
   // And show capacitance
-  DisplayValue(Caps[0].Value, Caps[0].Scale, 'F');
+  displayValue(caps[0].value, caps[0].scale, 'F');
 }
 
 // Show diode
-void ShowDiode(void) {
-  Diode_Type *D1;                         // Pointer to diode #1
-  Diode_Type *D2 = NULL;                  // Pointer to diode #2
+void showDiode(void) {
+  Diodes *D1;                         // Pointer to diode #1
+  Diodes *D2 = NULL;                  // Pointer to diode #2
   byte SkipFlag = 0;                      // Flag for anti-parallel diodes
-  byte A = 5;                             // ID of common anode
-  byte C = 5;                             // ID of common cothode
-  unsigned int I_leak;                    // Leakage current
+  byte A = 5;                             // id of common anode
+  byte C = 5;                             // id of common cothode
+  unsigned int iLeak;                    // Leakage current
 
-  D1 = &Diodes[0];                        // Pointer to first diode
+  D1 = &diodes[0];                        // Pointer to first diode
 
   // Figure out which diodes to display
-  if(Check.Diodes == 1) {                 // Single diode
-    C = D1->C;                            // Make anode first pin
+  if(check.diodes == 1) {                 // Single diode
+    C = D1->c;                            // Make anode first pin
   } else {                                // To many diodes
     D1 = NULL;                            // Don't display any diode
-    ShowFail();                           // And tell user
+    showFail();                           // And tell user
     return;
   }
-  lcd_createChar(5, sym_DIODE1);
-  lcd_createChar(6, sym_DIODE2);
-  lcd_createChar(7, sym_F);
-  lcd_createChar(2, sym_LOW1);
-  lcd_createChar(3, sym_LOW2);
-  lcd_createChar(4, sym_R);
-  lcd_createChar(0, sym_V);
-  lcd_createChar(1, sym_I);
+  lcd_createChar(5, symDIODE1);
+  lcd_createChar(6, symDIODE2);
+  lcd_createChar(7, symF);
+  lcd_createChar(2, symLOW1);
+  lcd_createChar(3, symLOW2);
+  lcd_createChar(4, symR);
+  lcd_createChar(0, symV);
+  lcd_createChar(1, symI);
   lcd_clear();
   lcd.print(F("Diode"));
   lcd_setcursor(19, 0);
-  lcd_testpin(D1->A);                     // Display pin #1
+  lcd_testpin(D1->a);                     // Display pin #1
   lcd_setcursor(19, 1);
   lcd.write(5);
   lcd_setcursor(19, 2);
   lcd.write(6);
   lcd_setcursor(19, 3);
-  lcd_testpin(D1->C);                     // Display pin #2
+  lcd_testpin(D1->c);                     // Display pin #2
   lcd_setcursor(0, 1);                    // Move to line #1
 
 
@@ -3214,8 +3226,8 @@ void ShowDiode(void) {
   // Uf
   lcd.write((byte) 0);
   lcd.write((byte) 7);
-  lcd.print(F(" = "));
-  ShowDiode_Uf(D1);                       // First diode
+  lcd.print(F("= "));
+  showDiode_Uf(D1);                       // First diode
   lcd_setcursor(0, 2);
   // Display low current Uf
   lcd.write((byte) 0);
@@ -3223,41 +3235,41 @@ void ShowDiode(void) {
   lcd.write((byte) 2);
   lcd.write((byte) 3);
   lcd.print(F(" = "));
-  DisplayValue(D1->V_f2, -3, 'V');
+  displayValue(D1->vF2, -3, 'V');
 
   // Reverse leakage current
-  UpdateProbes(D1->C, D1->A, 0);          // Reverse diode
-  I_leak = GetLeakageCurrent();           // Get current (in µA)
+  updateProbes(D1->c, D1->a, 0);          // Reverse diode
+  iLeak = getLeakageCurrent();           // Get current (in µA)
   lcd_setcursor(0, 3);
   lcd.write((byte) 1);
   lcd.write((byte) 4);
-  lcd.print(F(" = "));
-  DisplayValue(I_leak, -6, 'A');          // Display current
+  lcd.print(F("= "));
+  displayValue(iLeak, -6, 'A');          // Display current
 
   // Capacitance
   lcd.write(' ');
   lcd.print(F("C = "));
-  ShowDiode_C(D1);                        // First diode
+  showDiode_C(D1);                        // First diode
 }
 
 // Show BJT
-void ShowBJT(void) {
-  Diode_Type *Diode;                      // Pointer to diode
+void showBjt(void) {
+  Diodes *diode;                      // Pointer to diode
   char *String;                           // Display string pointer
-  byte Counter;                           // Counter
-  byte A_Pin;                             // Pin acting as anode
-  byte C_Pin;                             // Pin acting as cathode
+  byte cnt;                           // Counter
+  byte aPin;                             // Pin acting as anode
+  byte cPin;                             // Pin acting as cathode
   byte e, c;
   long int V_BE;                          // V_BE
   signed int Slope;                       // Slope of forward voltage
 
   wdt_disable();                          // Disable watchdog
   // Display type
-  if(Check.Type == TYPE_NPN) lcd_createChar(2, sym_NPN);
-  else lcd_createChar(2, sym_PNP);
+  if(check.type == TYPE_NPN) lcd_createChar(2, symNPN);
+  else lcd_createChar(2, symPNP);
   lcd_clear();
   lcd_home();
-  if(Check.Type == TYPE_NPN) {            // NPN
+  if(check.type == TYPE_NPN) {            // NPN
     e = 3;
     c = 1;
     lcd.print(F("Trans. Bipolar   NPN"));
@@ -3266,21 +3278,21 @@ void ShowBJT(void) {
     c = 3;
     lcd.print(F("Trans. Bipolar   PNP"));
   }
-  lcd_createChar(7, sym_FE);
-  lcd_createChar(5, sym_BE1);
-  lcd_createChar(6, sym_BE2);
-  lcd_createChar(3, sym_CE1);
-  lcd_createChar(4, sym_CE2);
-  lcd_createChar(0, sym_H);
-  lcd_createChar(1, sym_V);
-  if(Check.Type == TYPE_NPN) lcd_createChar(2, sym_NPN);
-  else lcd_createChar(2, sym_PNP);
+  lcd_createChar(7, symFE);
+  lcd_createChar(5, symBE1);
+  lcd_createChar(6, symBE2);
+  lcd_createChar(3, symCE1);
+  lcd_createChar(4, symCE2);
+  lcd_createChar(0, symH);
+  lcd_createChar(1, symV);
+  if(check.type == TYPE_NPN) lcd_createChar(2, symNPN);
+  else lcd_createChar(2, symPNP);
   lcd_setcursor(19, e);
-  lcd_testpin(BJT.E);                     // Display emitter pin
+  lcd_testpin(bjt.e);                     // Display emitter pin
   lcd_setcursor(14, 2);
-  lcd_testpin(BJT.B);                     // Display base pin
+  lcd_testpin(bjt.b);                     // Display base pin
   lcd_setcursor(19, c);
-  lcd_testpin(BJT.C);                     // Display collector pin
+  lcd_testpin(bjt.c);                     // Display collector pin
   lcd_setcursor(16, 2);
   lcd.write('-');
   lcd.write((byte) 2);
@@ -3288,23 +3300,23 @@ void ShowBJT(void) {
   lcd.write((byte) 0);
   lcd.write((byte) 7);
   lcd.print(F("  = "));
-  DisplayValue(BJT.hFE, 0, 0);
+  displayValue(bjt.hFe, 0, 0);
   // Display V_BE (taken from diode forward voltage)
-  Diode = &Diodes[0];                     // Get pointer of first diode
-  Counter = 0;
-  while (Counter < Check.Diodes) {        // Check all diodes
+  diode = &diodes[0];                     // Get pointer of first diode
+  cnt = 0;
+  while (cnt < check.diodes) {        // Check all diodes
    // Set pins based on BJT type
-    if(Check.Type == TYPE_NPN) {
-      // Diode B -> E
-      A_Pin = BJT.B;
-      C_Pin = BJT.E;
+    if(check.type == TYPE_NPN) {
+      // diode B -> E
+      aPin = bjt.b;
+      cPin = bjt.e;
     } else {
-      // Diode E -> B
-      A_Pin = BJT.E;
-      C_Pin = BJT.B;
+      // diode E -> B
+      aPin = bjt.e;
+      cPin = bjt.b;
     }
     // If the diode matches the transistor
-    if(Diode->A == A_Pin && Diode->C == C_Pin) {
+    if(diode->a == aPin && diode->c == cPin) {
   lcd_setcursor(0, 2);                    // Move to line #2
   lcd.write(1);
   lcd.write((byte) 5);
@@ -3318,54 +3330,54 @@ void ShowBJT(void) {
 //       3 decades.
 
       // Calculate slope for one decade
-      Slope = Diode->V_f - Diode->V_f2;
+      Slope = diode->vF - diode->vF2;
       Slope /= 3;
       // Select V_BE based on hFE
-      if(BJT.hFE < 100) {                 // Low hFE
+      if(bjt.hFe < 100) {                 // Low hFE
 
 //         BJTs with low hFE are power transistors and need a large I_b
 //         to drive the load. So we simply take Vf of the high test current
 //         measurement (7mA).
 
-        V_BE = Diode->V_f;
-      } else if(BJT.hFE < 250) {          // Mid-range hFE
+        V_BE = diode->vF;
+      } else if(bjt.hFe < 250) {          // Mid-range hFE
 
 //         BJTs with a mid-range hFE are signal transistors and need
 //         a small I_b to drive the load. So we interpolate Vf for
 //         a virtual test current of about 1mA.
 
-        V_BE = Diode->V_f - Slope;
+        V_BE = diode->vF - Slope;
       } else {                            // High hFE
 
 //         BJTs with a high hFE are small signal transistors and need
 //         only a very small I_b to drive the load. So we interpolate Vf
 //         for a virtual test current of about 0.1mA.
 
-        V_BE = Diode->V_f2 + Slope;
+        V_BE = diode->vF2 + Slope;
       }
-    if(Check.Type == TYPE_PNP) V_BE = - V_BE;
-      DisplaySignedValue(V_BE, -3, 'V');
+    if(check.type == TYPE_PNP) V_BE = - V_BE;
+      displaySignedValue(V_BE, -3, 'V');
       // I_CEO: collector emitter cutoff current (leakage)
       lcd_setcursor(0, 3);
       lcd.write('I');
       lcd.write((byte) 3);
       lcd.write((byte) 4);
-      lcd.print(F(" = "));                   // Display: I_CE0=
-      DisplayValue(BJT.I_CE0, -6, 'A');   // Display current
-      Counter = Check.Diodes;             // End loop
+      lcd.print(F(" = "));                   // Display: iCeo=
+      displayValue(bjt.iCeo, -6, 'A');   // Display current
+      cnt = check.diodes;             // End loop
     } else {
-      Counter++;                          // Increase counter
-      Diode++;                            // Next one
+      cnt++;                          // Increase counter
+      diode++;                            // Next one
     }
   }
   wdt_reset();
 }
 
 // Show MOSFET/IGBT extras
-void Show_FET_IGBT_Extras(byte Symbol) {
+void showFetIGBT_Extras(byte Symbol) {
   // Instrinsic diode
   lcd_clear();
-  if(Check.Diodes > 0) {
+  if(check.diodes > 0) {
     lcd.write(' ');                       // Display space
     lcd.write(Symbol);                    // Display diode symbol
   }
@@ -3373,43 +3385,43 @@ void Show_FET_IGBT_Extras(byte Symbol) {
   // Gate threshold voltage
   lcd_setcursor(0, 1);
   lcd.print(F("Vth = "));
-  DisplayValue(FET.V_th, -3, 'V');        // Display V_th in mV
+  displayValue(fet.vTh, -3, 'V');        // Display vTh in mV
   lcd_setcursor(0, 2);
   // Display gate capacitance
   lcd.print(F("Cgs = "));                 // Display: Cgs=
-  MeasureCap(FET.G, FET.S, 0);            // Measure capacitance
+  measureCap(fet.g, fet.s, 0);            // Measure capacitance
   // Display value and unit
-  DisplayValue(Caps[0].Value, Caps[0].Scale, 'F');
+  displayValue(caps[0].value, caps[0].scale, 'F');
 }
 
 // Show FET
-void ShowFET(void) {
-  byte Data;                              // Temp. data
+void showFet(void) {
+  byte data;                              // Temp. data
   byte Symbol;                            // Intrinsic diode
 
   // Set variables based on channel mode
-  if(Check.Type & TYPE_N_CHANNEL)         // n-channel
-    Data = 'N';
+  if(check.type & TYPE_N_CHANNEL)         // n-channel
+    data = 'N';
   else                                    // p-channel
-    Data = 'P';
+    data = 'P';
   // Display type
-  if(Check.Type & TYPE_MOSFET) {          // MOSFET
+  if(check.type & TYPE_MOSFET) {          // MOSFET
     lcd.print(F("MOS"));
     lcd.print(F("FET"));
   // Display channel type
     lcd_setcursor(0, 1);
-    lcd.write(Data);                      // Display: N / P
+    lcd.write(data);                      // Display: N / P
     lcd.print(F("-channel"));
-  } else  {                               // JFET sym_JFET
-    if(Data == 'P')
-      lcd_createChar(4, sym_PFETG);
+  } else  {                               // JFET symJFET
+    if(data == 'P')
+      lcd_createChar(4, symPFetG);
     else
-      lcd_createChar(4, sym_NFETG);
-    lcd_createChar(5, sym_FET);
-    lcd_createChar(6, sym_JFETT);
-    lcd_createChar(7, sym_JFETB);
-    if(Check.Type == TYPE_NPN) lcd_createChar(2, sym_NPN);
-    else lcd_createChar(2, sym_PNP);
+      lcd_createChar(4, symNFetG);
+    lcd_createChar(5, symFet);
+    lcd_createChar(6, symJFetT);
+    lcd_createChar(7, symJFetB);
+    if(check.type == TYPE_NPN) lcd_createChar(2, symNPN);
+    else lcd_createChar(2, symPNP);
     lcd_setcursor(16, 2);
     lcd.write(4);
     lcd.write(5);
@@ -3418,13 +3430,13 @@ void ShowFET(void) {
     lcd.write(6);
     lcd.print(F(" ?"));
     lcd_setcursor(14, 2);
-    lcd_testpin(FET.G);                   // Display gate pin
+    lcd_testpin(fet.g);                   // Display gate pin
     lcd_setcursor(17, 3);
     lcd.write(7);
     lcd.print(F(" ?"));
     lcd_setcursor(0, 0);
     lcd.print(F("Tran. JFET "));
-    lcd.write(Data);
+    lcd.write(data);
     lcd.print(F("-channel"));
     lcd_setcursor(0, 1);
     lcd.print(F("Cannot"));
@@ -3437,9 +3449,9 @@ void ShowFET(void) {
     return;
   }
   // Display mode
-  if(Check.Type & TYPE_MOSFET) {          // MOSFET
+  if(check.type & TYPE_MOSFET) {          // MOSFET
     lcd_setcursor(0, 1);
-    if(Check.Type & TYPE_ENHANCEMENT)     // Enhancement mode
+    if(check.type & TYPE_ENHANCEMENT)     // Enhancement mode
       lcd.print(F("Enhancement"));
     else                                  // Depletion mode
       lcd.print(F("Depletion"));
@@ -3447,92 +3459,92 @@ void ShowFET(void) {
   // Pins
   lcd_setcursor(0, 2);                    // Move to line #2
   lcd.print(F("GDS = "));
-  lcd_testpin(FET.G);                     // Display gate pin
-  lcd_testpin(FET.D);                     // Display drain pin
-  lcd_testpin(FET.S);                     // Display source pin
+  lcd_testpin(fet.g);                     // Display gate pin
+  lcd_testpin(fet.d);                     // Display drain pin
+  lcd_testpin(fet.s);                     // Display source pin
 
   // Extra data for MOSFET in enhancement mode
-  if(Check.Type & (TYPE_ENHANCEMENT | TYPE_MOSFET)) {
-    // Show diode, V_th and Cgs
-    Show_FET_IGBT_Extras(Symbol);
+  if(check.type & (TYPE_ENHANCEMENT | TYPE_MOSFET)) {
+    // Show diode, vTh and Cgs
+    showFetIGBT_Extras(Symbol);
   }
 }
 
 // Show IGBT
-void ShowIGBT(void) {
-  byte Data;                              // Temp. data
+void showIGBT(void) {
+  byte data;                              // Temp. data
   byte Symbol;                            // Intrinsic diode
   // Set variables based on channel mode
-  if(Check.Type & TYPE_N_CHANNEL)         // n-channel
-    Data = 'N';
+  if(check.type & TYPE_N_CHANNEL)         // n-channel
+    data = 'N';
   else                                    // p-channel
-    Data = 'P';
+    data = 'P';
   lcd.print(F("IGBT"));                    // Display: IGBT
   // Display channel type
   lcd.write(' ');
-  lcd.write(Data);                        // Display: N / P
+  lcd.write(data);                        // Display: N / P
   lcd.print(F("-channel"));
   // Display mode
   lcd_setcursor(0, 1);
-  if(Check.Type & TYPE_ENHANCEMENT)     // Enhancement mode
+  if(check.type & TYPE_ENHANCEMENT)     // Enhancement mode
     lcd.print(F("Enhancement"));
   else                                  // Depletion mode
     lcd.print(F("Depletion"));
   // Pins
   lcd_setcursor(0, 2);                    // Move to line #2
   lcd.print(F("GCE = "));
-  lcd_testpin(FET.G);                     // Display gate pin
-  lcd_testpin(FET.D);                     // Display collector pin
-  lcd_testpin(FET.S);                     // Display emitter pin
-  // Show diode, V_th and C_CE
-  Show_FET_IGBT_Extras(Symbol);
+  lcd_testpin(fet.g);                     // Display gate pin
+  lcd_testpin(fet.d);                     // Display collector pin
+  lcd_testpin(fet.s);                     // Display emitter pin
+  // Show diode, vTh and C_CE
+  showFetIGBT_Extras(Symbol);
 }
 
 // Show special components like Thyristor and Triac
-void ShowSpecial(void) {
+void showSpecial(void) {
   // Display component type
-  if(Check.Found == COMP_THYRISTOR) {
+  if(check.found == COMP_THYRISTOR) {
     lcd.print(F("Thyristor"));
-  } else if(Check.Found == COMP_TRIAC) {
+  } else if(check.found == COMP_TRIAC) {
     lcd.print(F("Triac"));                 // Display: triac
   }
   // Display pins
   lcd_setcursor(0, 2);                    // Move to line #2
   lcd.print(F("GAC = "));                     // Display: GAK
-  lcd_testpin(BJT.B);                     // Display gate pin
-  lcd_testpin(BJT.C);                     // Display anode pin
-  lcd_testpin(BJT.E);                     // Display cathode pin
+  lcd_testpin(bjt.b);                     // Display gate pin
+  lcd_testpin(bjt.c);                     // Display anode pin
+  lcd_testpin(bjt.e);                     // Display cathode pin
 }
 
 // Show resistor
-void ShowResistor(void) {
-  Resistor_Type *R1;                      // Pointer to resistor #1
-  byte Pin;                               // ID of common pin
-  R1 = &Resistors[0];                     // Pointer to first resistor
+void showResistor(void) {
+  Resistors *R1;                      // Pointer to resistor #1
+  byte Pin;                               // id of common pin
+  R1 = &resistors[0];                     // Pointer to first resistor
 
   // Get inductance and display if relevant
-  lcd_createChar(5, sym_RES1);
-  lcd_createChar(6, sym_RES2);
-  if(MeasureInductor(R1) == 1) {
+  lcd_createChar(5, symRES1);
+  lcd_createChar(6, symRES2);
+  if(measureInductor(R1) == 1) {
     // Display the pins, first resistor
-    lcd_createChar(5, sym_IND1);
-    lcd_createChar(6, sym_IND2);
+    lcd_createChar(5, symIND1);
+    lcd_createChar(6, symIND2);
     lcd_clear();
     lcd.print(F("Inductor"));
     lcd_setcursor(19, 0);
-    lcd_testpin(R1->A);
+    lcd_testpin(R1->a);
     lcd_setcursor(19, 1);
     lcd.write(5);
     lcd_setcursor(19, 2);
     lcd.write(6);
     lcd_setcursor(19, 3);
-    lcd_testpin(R1->B);
+    lcd_testpin(R1->b);
     lcd_setcursor(0, 1);                  // Move to line #2
     lcd.print(F("Value: "));
-    DisplayValue(Inductor.Value, Inductor.Scale, 'H');
+    displayValue(inductor.value, inductor.scale, 'H');
     lcd_setcursor(0, 2);                  // Move to line #2
     lcd.print(F("Res.: "));
-      DisplayValue(R1->Value, R1->Scale, LCD_CHAR_OMEGA);
+      displayValue(R1->value, R1->scale, LCD_CHAR_OMEGA);
   } else {
   // Display the pins, first resistor
     lcd_clear();
@@ -3540,184 +3552,184 @@ void ShowResistor(void) {
     lcd_setcursor(2, 0);
     lcd.write('s');
     lcd_setcursor(19, 0);
-    lcd_testpin(R1->A);
+    lcd_testpin(R1->a);
     lcd_setcursor(19, 1);
     lcd.write(5);
     lcd_setcursor(19, 2);
     lcd.write(6);
     lcd_setcursor(19, 3);
-    lcd_testpin(R1->B);
+    lcd_testpin(R1->b);
     lcd_setcursor(0, 1);                  // Move to line #2
     lcd.print(F("Value: "));
-    DisplayValue(R1->Value, R1->Scale, LCD_CHAR_OMEGA);
+    displayValue(R1->value, R1->scale, LCD_CHAR_OMEGA);
   }
 }
 
 // Show capacitor
-void ShowCapacitor(void) {
-  Capacitor_Type *MaxCap;                 // Pointer to largest cap
-  Capacitor_Type *Cap;                    // Pointer to cap
-  byte Counter;                           // Loop counter
+void showCapacitor(void) {
+  Capacitors *maxCap;                 // Pointer to largest cap
+  Capacitors *cap;                    // Pointer to cap
+  byte cnt;                           // Loop counter
 
   // Find largest cap
-  MaxCap = &Caps[0];                      // Pointer to first cap
-  Cap = MaxCap;
-  for (Counter = 1; Counter <= 2; Counter++)
+  maxCap = &caps[0];                      // Pointer to first cap
+  cap = maxCap;
+  for (cnt = 1; cnt <= 2; cnt++)
   {
-    Cap++;                                // Next cap
-    if(CmpValue(Cap->Value, Cap->Scale, MaxCap->Value, MaxCap->Scale) == 1)
+    cap++;                                // Next cap
+    if(cmpValue(cap->value, cap->scale, maxCap->value, maxCap->scale) == 1)
     {
-      MaxCap = Cap;
+      maxCap = cap;
     }
   }
-  // Serial.println(MaxCap->Value);
-  // Serial.println(MaxCap->Scale);
+  // Serial.println(maxCap->value);
+  // Serial.println(maxCap->scale);
 
   // Display pinout
-  lcd_createChar(5, sym_CAP1);
-  lcd_createChar(6, sym_CAP2);
+  lcd_createChar(5, symCAP1);
+  lcd_createChar(6, symCAP2);
   lcd_clear();
   lcd.print(F("Capacitor"));
   lcd_setcursor(19, 0);
-  lcd_testpin(MaxCap->A);                 // Display pin #1
+  lcd_testpin(maxCap->a);                 // Display pin #1
   lcd_setcursor(19, 1);
   lcd.write(5);
   lcd_setcursor(19, 2);
   lcd.write(6);
   lcd_setcursor(19, 3);
-  lcd_testpin(MaxCap->B);                 // Display pin #2
+  lcd_testpin(maxCap->b);                 // Display pin #2
   lcd_setcursor(0, 1);                    // Move to line #2
   lcd.print(F("Value: "));
   // And show capacitance
-  // Serial.println(MaxCap->Scale);
-  DisplayValue(MaxCap->Value, MaxCap->Scale, 'F');
+  // Serial.println(maxCap->scale);
+  displayValue(maxCap->value, maxCap->scale, 'F');
 }
 
 // Load adjustment values
-void LoadAdjust(void) {
-  if(EEPROM.read(CONFIG_MAGIC) == ROM_MAGIC) {
+void loadAdjust(void) {
+  if(EEPROM.read(PARAM_MAGIC) == ROM_MAGIC) {
     ReadEEP();
   } else {
     // Default Values
-    Config.RiL = R_MCU_LOW;
-    Config.RiH = R_MCU_HIGH;
-    Config.RZero = R_ZERO;
-    Config.CapZero = C_ZERO;
-    Config.RefOffset = UREF_OFFSET;
-    Config.CompOffset = COMPARATOR_OFFSET;
+    parameters.rIntLow = R_MCU_LOW;
+    parameters.rIntHigh = R_MCU_HIGH;
+    parameters.rZero = R_ZERO;
+    parameters.capZero = C_ZERO;
+    parameters.refOffset = VREF_OFFSET;
+    parameters.compOffset = COMPARATOR_OFFSET;
     SaveEEP();
   }
 }
 
-// SelfTest
+// Selftest
 byte SelfTest(void) {
-  byte Flag = 0;                          // Return value
-  byte Test = 1;                          // Test counter
-  byte Counter;                           // Loop counter
-  byte DisplayFlag;                       // Display flag
-  unsigned int Val0;                      // Voltage/value
+  byte flag = 0;                          // Return value
+  byte test = 1;                          // Test counter
+  byte cnt;                           // Loop counter
+  byte displayFlag;                       // Display flag
+  unsigned int value0;                      // Voltage/value
   // Voltages/values
-  signed int Val1 = 0, Val2 = 0, Val3 = 0;
+  signed int value1 = 0, value2 = 0, value3 = 0;
 
   ShortCircuit(1);                        // Make sure all probes are shorted
   // Loop through all tests
-  while (Test <= 6) {
-    Counter = 1;
+  while (test <= 6) {
+    cnt = 1;
     // Repeat each test 5 times
-    while (Counter <= 5) {
+    while (cnt <= 5) {
       // Display test number
       lcd_clear();
       lcd.write('T');                     // Display: T
-      lcd.write('0' + Test);              // Display test number
+      lcd.write('0' + test);              // Display test number
       lcd.write(' ');
-      DisplayFlag = 1;                    // Display values by default
+      displayFlag = 1;                    // Display values by default
       // Tests
-      switch (Test) {
+      switch (test) {
         case 1:                           // Reference voltage
-          Val0 = ReadU(0x0e);             // Dummy read for bandgap stabilization
-          Val0 = ReadU(0x0e);             // Read bandgap reference voltage
+          value0 = readVoltage(0x0e, 1);          // Dummy read for bandgap stabilization
+          value0 = readVoltage(0x0e, 1);          // Read bandgap reference voltage
           lcd.print(F("Vref"));
           lcd_setcursor(0, 2);
-          DisplayValue(Val0, -3, 'V');    // Display voltage in mV
-          DisplayFlag = 0;                // Reset flag
+          displayValue(value0, -3, 'V');    // Display voltage in mV
+          displayFlag = 0;                // Reset flag
           break;
 
-        case 2:                           // Compare Rl resistors (probes still shorted)
-          lcd.print(F("+Rl-"));
+        case 2:                           // Compare rLow resistors (probes still shorted)
+          lcd.print(F("+rLow-"));
           lcd.write(' ');
           lcd.print(F("12 13 23"));
-          // Set up a voltage divider with the Rl's, substract theoretical voltage of voltage divider
-          // TP1: Gnd -- Rl -- probe-2 -- probe-1 -- Rl -- Vcc
+          // Set up a voltage divider with the rLow's, substract theoretical voltage of voltage divider
+          // TP1: Gnd -- rLow -- probe-2 -- probe-1 -- rLow -- Vcc
           R_PORT = 1 << (TP1 * 2);
           R_DDR = (1 << (TP1 * 2)) | (1 << (TP2 * 2));
-          Val1 = ReadU_20ms(TP3);
-          Val1 -= ((long)UREF_VCC * (R_MCU_LOW + R_LOW)) / (R_MCU_LOW + R_LOW + R_LOW + R_MCU_HIGH);
-          // TP1: Gnd -- Rl -- probe-3 -- probe-1 -- Rl -- Vcc
+          value1 = readVoltage20ms(TP3);
+          value1 -= ((long)VREF_VCC * (R_MCU_LOW + R_LOW)) / (R_MCU_LOW + R_LOW + R_LOW + R_MCU_HIGH);
+          // TP1: Gnd -- rLow -- probe-3 -- probe-1 -- rLow -- Vcc
           R_DDR = (1 << (TP1 * 2)) | (1 << (TP3 * 2));
-          Val2 = ReadU_20ms(TP2);
-          Val2 -= ((long)UREF_VCC * (R_MCU_LOW + R_LOW)) / (R_MCU_LOW + R_LOW + R_LOW + R_MCU_HIGH);
-          // TP1: Gnd -- Rl -- probe-3 -- probe-2 -- Rl -- Vcc
+          value2 = readVoltage20ms(TP2);
+          value2 -= ((long)VREF_VCC * (R_MCU_LOW + R_LOW)) / (R_MCU_LOW + R_LOW + R_LOW + R_MCU_HIGH);
+          // TP1: Gnd -- rLow -- probe-3 -- probe-2 -- rLow -- Vcc
           R_PORT = 1 << (TP2 * 2);
           R_DDR = (1 << (TP2 * 2)) | (1 << (TP3 * 2));
-          Val3 = ReadU_20ms(TP2);
-          Val3 -= ((long)UREF_VCC * (R_MCU_LOW + R_LOW)) / (R_MCU_LOW + R_LOW + R_LOW + R_MCU_HIGH);
+          value3 = readVoltage20ms(TP2);
+          value3 -= ((long)VREF_VCC * (R_MCU_LOW + R_LOW)) / (R_MCU_LOW + R_LOW + R_LOW + R_MCU_HIGH);
           break;
 
-        case 3:                           // Compare Rh resistors (probes still shorted)
-          lcd.print(F("+Rh-"));
+        case 3:                           // Compare RHigh resistors (probes still shorted)
+          lcd.print(F("+RHigh-"));
           lcd.write(' ');
           lcd.print(F("12 13 23"));
-          // Set up a voltage divider with the Rh's
-          // TP1: Gnd -- Rh -- probe-2 -- probe-1 -- Rh -- Vcc
+          // Set up a voltage divider with the RHigh's
+          // TP1: Gnd -- RHigh -- probe-2 -- probe-1 -- RHigh -- Vcc
           R_PORT = 2 << (TP1 * 2);
           R_DDR = (2 << (TP1 * 2)) | (2 << (TP2 * 2));
-          Val1 = ReadU_20ms(TP3);
-          Val1 -= (UREF_VCC / 2);
-          // TP1: Gnd -- Rh -- probe-3 -- probe-1 -- Rh -- Vcc
+          value1 = readVoltage20ms(TP3);
+          value1 -= (VREF_VCC / 2);
+          // TP1: Gnd -- RHigh -- probe-3 -- probe-1 -- RHigh -- Vcc
           R_DDR = (2 << (TP1 * 2)) | (2 << (TP3 * 2));
-          Val2 = ReadU_20ms(TP2);
-          Val2 -= (UREF_VCC / 2);
-          // TP1: Gnd -- Rh -- probe-3 -- probe-2 -- Rh -- Vcc
+          value2 = readVoltage20ms(TP2);
+          value2 -= (VREF_VCC / 2);
+          // TP1: Gnd -- RHigh -- probe-3 -- probe-2 -- RHigh -- Vcc
           R_PORT = 2 << (TP2 * 2);
           R_DDR = (2 << (TP2 * 2)) | (2 << (TP3 * 2));
-          Val3 = ReadU_20ms(TP1);
-          Val3 -= (UREF_VCC / 2);
+          value3 = readVoltage20ms(TP1);
+          value3 -= (VREF_VCC / 2);
           break;
 
         case 4:                           // Un-short probes
           ShortCircuit(0);                // Make sure probes are not shorted
-          Counter = 100;                  // Skip test
-          DisplayFlag = 0;                // Reset flag
+          cnt = 100;                  // Skip test
+          displayFlag = 0;                // Reset flag
           break;
 
-        case 5:                           // Rh resistors pulled down
-          lcd.print(F("Rh-"));
-          // TP1: Gnd -- Rh -- probe
+        case 5:                           // RHigh resistors pulled down
+          lcd.print(F("RHigh-"));
+          // TP1: Gnd -- RHigh -- probe
           R_PORT = 0;
           R_DDR = 2 << (TP1 * 2);
-          Val1 = ReadU_20ms(TP1);
-          // TP1: Gnd -- Rh -- probe
+          value1 = readVoltage20ms(TP1);
+          // TP1: Gnd -- RHigh -- probe
           R_DDR = 2 << (TP2 * 2);
-          Val2 = ReadU_20ms(TP2);
-          // TP1: Gnd -- Rh -- probe
+          value2 = readVoltage20ms(TP2);
+          // TP1: Gnd -- RHigh -- probe
           R_DDR = 2 << (TP3 * 2);
-          Val3 = ReadU_20ms(TP3);
+          value3 = readVoltage20ms(TP3);
           break;
 
-        case 6:                           // Rh resistors pulled up
-          lcd.print(F("Rh+"));
-          // TP1: probe -- Rh -- Vcc
+        case 6:                           // RHigh resistors pulled up
+          lcd.print(F("RHigh+"));
+          // TP1: probe -- RHigh -- Vcc
           R_DDR = 2 << (TP1 * 2);
           R_PORT = 2 << (TP1 * 2);
-          Val1 = ReadU_20ms(TP1);
-          // TP1: probe -- Rh -- Vcc
+          value1 = readVoltage20ms(TP1);
+          // TP1: probe -- RHigh -- Vcc
           R_DDR = 2 << (TP2 * 2);
           R_PORT = 2 << (TP2 * 2);
-          Val2 = ReadU_20ms(TP2);
-          // TP1: probe -- Rh -- Vcc
+          value2 = readVoltage20ms(TP2);
+          // TP1: probe -- RHigh -- Vcc
           R_DDR = 2 << (TP3 * 2);
           R_PORT = 2 << (TP3 * 2);
-          Val3 = ReadU_20ms(TP3);
+          value3 = readVoltage20ms(TP3);
           break;
       }
 
@@ -3726,150 +3738,150 @@ byte SelfTest(void) {
       R_PORT = 0;                         // All pins low
 
       // Display voltages/values of all probes
-      if(DisplayFlag) {
+      if(displayFlag) {
         lcd_setcursor(0, 2);              // Move to line #2
-        DisplaySignedValue(Val1, 0 , 0);  // Display TP1
+        displaySignedValue(value1, 0 , 0);  // Display TP1
         lcd.write(' ');
-        DisplaySignedValue(Val2, 0 , 0);  // Display TP2
+        displaySignedValue(value2, 0 , 0);  // Display TP2
         lcd.write(' ');
-        DisplaySignedValue(Val3, 0 , 0);  // Display TP3
+        displaySignedValue(value3, 0 , 0);  // Display TP3
       }
       // Wait and check test push button
-      if(Counter < 100) {                 // When we don't skip this test
-          DisplayFlag = TestKey();        // Catch key press or timeout
+      if(cnt < 100) {                 // When we don't skip this test
+          displayFlag = testKey();        // Catch key press or timeout
         // Short press -> next test / long press -> end selftest
-        if(DisplayFlag > 0) {
-          Counter = 100;                  // Skip current test anyway
-          if(DisplayFlag == 2) Test = 100; // Also skip selftest
+        if(displayFlag > 0) {
+          cnt = 100;                  // Skip current test anyway
+          if(displayFlag == 2) test = 100; // Also skip selftest
         }
       }
-      Counter++;                          // Next run
+      cnt++;                          // Next run
     }
-    Test++;                               // Next one
+    test++;                               // Next one
   }
-  Flag = 1;                               // Signal success
-  return Flag;
+  flag = 1;                               // Signal success
+  return flag;
 }
 
 // Self adjustment
-byte SelfAdjust(void) {
-  byte Flag = 0;                          // Return value
-  byte Test = 1;                          // Test counter
-  byte Counter;                           // Loop counter
-  byte DisplayFlag;                       // Display flag
+byte selfAdjust(void) {
+  byte flag = 0;                          // Return value
+  byte test = 1;                          // Test counter
+  byte cnt;                           // Loop counter
+  byte displayFlag;                       // Display flag
 
   // Voltages
-  unsigned int Val1 = 0, Val2 = 0, Val3 = 0;
-  byte CapCounter = 0;                    // Number of C_Zero measurements
-  unsigned int CapSum = 0;                // Sum of C_Zero values
-  byte RCounter = 0;                      // Number of R_Zero measurements
+  unsigned int value1 = 0, value2 = 0, value3 = 0;
+  byte capCount = 0;                    // Number of C_Zero measurements
+  unsigned int capSum = 0;                // Sum of C_Zero values
+  byte rCount = 0;                      // Number of R_Zero measurements
   unsigned int RSum = 0;                  // Sum of R_Zero values
-  byte RiL_Counter = 0;                   // Number of U_RiL measurements
-  unsigned int U_RiL = 0;                 // Sum of U_RiL values
-  byte RiH_Counter = 0;                   // Number of U_RiH measurements
-  unsigned int U_RiH = 0;                 // Sum of U_RiL values
-  unsigned long Val0;                     // Temp. value
+  byte rIntLowCount = 0;                   // Number of vrIntLow measurements
+  unsigned int vrIntLow = 0;                 // Sum of vrIntLow values
+  byte rIntHighCount = 0;                   // Number of vRInternalHighl measurements
+  unsigned int vRInternalHighl = 0;                 // Sum of vrIntLow values
+  unsigned long value0;                     // Temp. value
 
   // Measurements
   ShortCircuit(1);                        // Make sure all probes are shorted
-  while (Test <= 5) {
-    Counter = 1;
+  while (test <= 5) {
+    cnt = 1;
 
     // Repeat each measurement 5 times
-    while (Counter <= 5) {
+    while (cnt <= 5) {
       // Display test number
       lcd_clear();
       lcd.write('A');                     // Display: a
-      lcd.write('0' + Test);              // Display number
+      lcd.write('0' + test);              // Display number
       lcd.write(' ');
-      DisplayFlag = 1;                    // Display values by default
+      displayFlag = 1;                    // Display values by default
 
       // Tests
-      switch (Test) {
+      switch (test) {
         case 1:                           // Resistance of probe leads (probes shorted)
           lcd.print(F("R0"));
           lcd.write(' ');
           lcd.print(F("12 13 23"));
            // The resistance is for two probes in series and we expect it to be
            // smaller than 1.00 Ohms, i.e. 0.50 Ohms for a single probe
-          UpdateProbes(TP2, TP1, 0);
-          Val1 = SmallResistor(0);
-          if(Val1 < 100) {                // Within limit
-            RSum += Val1;
-            RCounter++;
+          updateProbes(TP2, TP1, 0);
+          value1 = smallResistor(0);
+          if(value1 < 100) {                // Within limit
+            RSum += value1;
+            rCount++;
           }
-          UpdateProbes(TP3, TP1, 0);
-          Val2 = SmallResistor(0);
-          if(Val2 < 100) {                // Whithin limit
-            RSum += Val2;
-            RCounter++;
+          updateProbes(TP3, TP1, 0);
+          value2 = smallResistor(0);
+          if(value2 < 100) {                // Whithin limit
+            RSum += value2;
+            rCount++;
           }
-          UpdateProbes(TP3, TP2, 0);
-          Val3 = SmallResistor(0);
-          if(Val3 < 100) {                // Within limit
-            RSum += Val3;
-            RCounter++;
+          updateProbes(TP3, TP2, 0);
+          value3 = smallResistor(0);
+          if(value3 < 100) {                // Within limit
+            RSum += value3;
+            rCount++;
           }
           break;
 
         case 2:                           // Un-short probes
           ShortCircuit(0);                // Make sure probes are not shorted
-          Counter = 100;                  // Skip test
-          DisplayFlag = 0;                // Reset display flag
+          cnt = 100;                  // Skip test
+          displayFlag = 0;                // Reset display flag
           break;
 
         case 3:                           // Internal resistance of µC in pull-down mode
           lcd.print(F("Ri-"));
 
-          // TP1:  Gnd -- Ri -- probe -- Rl -- Ri -- Vcc
-          SetADCLow();
+          // TP1:  Gnd -- Ri -- probe -- rLow -- Ri -- Vcc
+          setAdcLow();
           ADC_DDR = 1 << TP1;
           R_PORT = 1 << (TP1 * 2);
           R_DDR = 1 << (TP1 * 2);
-          Val1 = ReadU_5ms(TP1);
-          U_RiL += Val1;
+          value1 = readVoltage5ms(TP1);
+          vrIntLow += value1;
 
-          // TP2: Gnd -- Ri -- probe -- Rl -- Ri -- Vcc
+          // TP2: Gnd -- Ri -- probe -- rLow -- Ri -- Vcc
           ADC_DDR = 1 << TP2;
           R_PORT =  1 << (TP2 * 2);
           R_DDR = 1 << (TP2 * 2);
-          Val2 = ReadU_5ms(TP2);
-          U_RiL += Val2;
+          value2 = readVoltage5ms(TP2);
+          vrIntLow += value2;
 
-          // TP3: Gnd -- Ri -- probe -- Rl -- Ri -- Vcc
+          // TP3: Gnd -- Ri -- probe -- rLow -- Ri -- Vcc
           ADC_DDR = 1 << TP3;
           R_PORT =  1 << (TP3 * 2);
           R_DDR = 1 << (TP3 * 2);
-          Val3 = ReadU_5ms(TP3);
-          U_RiL += Val3;
-          RiL_Counter += 3;
+          value3 = readVoltage5ms(TP3);
+          vrIntLow += value3;
+          rIntLowCount += 3;
           break;
 
         case 4:                           // Internal resistance of µC in pull-up mode
           lcd.print(F("Ri+"));
 
-          // TP1: Gnd -- Ri -- Rl -- probe -- Ri -- Vcc
+          // TP1: Gnd -- Ri -- rLow -- probe -- Ri -- Vcc
           R_PORT = 0;
           ADC_PORT = 1 << TP1;
           ADC_DDR = 1 << TP1;
           R_DDR = 1 << (TP1 * 2);
-          Val1 = UREF_VCC - ReadU_5ms(TP1);
-          U_RiH += Val1;
+          value1 = VREF_VCC - readVoltage5ms(TP1);
+          vRInternalHighl += value1;
 
-          // TP2: Gnd -- Ri -- Rl -- probe -- Ri -- Vcc
+          // TP2: Gnd -- Ri -- rLow -- probe -- Ri -- Vcc
           ADC_PORT = 1 << TP2;
           ADC_DDR = 1 << TP2;
           R_DDR = 1 << (TP2 * 2);
-          Val2 = UREF_VCC - ReadU_5ms(TP2);
-          U_RiH += Val2;
+          value2 = VREF_VCC - readVoltage5ms(TP2);
+          vRInternalHighl += value2;
 
-          // TP3: Gnd -- Ri -- Rl -- probe -- Ri -- Vcc
+          // TP3: Gnd -- Ri -- rLow -- probe -- Ri -- Vcc
           ADC_PORT = 1 << TP3;
           ADC_DDR = 1 << TP3;
           R_DDR = 1 << (TP3 * 2);
-          Val3 = UREF_VCC - ReadU_5ms(TP3);
-          U_RiH += Val3;
-          RiH_Counter += 3;
+          value3 = VREF_VCC - readVoltage5ms(TP3);
+          vRInternalHighl += value3;
+          rIntHighCount += 3;
           break;
 
         case 5:                           // Capacitance offset (PCB and probe leads)
@@ -3878,200 +3890,200 @@ byte SelfAdjust(void) {
           lcd.print(F("12 13 23"));
 
           // The capacitance is for two probes and we expect it to be less than 100pF.
-          MeasureCap(TP2, TP1, 0);
-          Val1 = (unsigned int)Caps[0].Raw;
+          measureCap(TP2, TP1, 0);
+          value1 = (unsigned int)caps[0].raw;
 
           // Limit offset to 100pF
-          if((Caps[0].Scale == -12) && (Caps[0].Raw <= 100)) {
-            CapSum += Val1;
-            CapCounter++;
+          if((caps[0].scale == -12) && (caps[0].raw <= 100)) {
+            capSum += value1;
+            capCount++;
           }
-          MeasureCap(TP3, TP1, 1);
-          Val2 = (unsigned int)Caps[1].Raw;
+          measureCap(TP3, TP1, 1);
+          value2 = (unsigned int)caps[1].raw;
 
           // Limit offset to 100pF
-          if((Caps[1].Scale == -12) && (Caps[1].Raw <= 100)) {
-            CapSum += Val2;
-            CapCounter++;
+          if((caps[1].scale == -12) && (caps[1].raw <= 100)) {
+            capSum += value2;
+            capCount++;
           }
-          MeasureCap(TP3, TP2, 2);
-          Val3 = (unsigned int)Caps[2].Raw;
+          measureCap(TP3, TP2, 2);
+          value3 = (unsigned int)caps[2].raw;
 
           // Limit offset to 100pF
-          if((Caps[2].Scale == -12) && (Caps[2].Raw <= 100)) {
-            CapSum += Val3;
-            CapCounter++;
+          if((caps[2].scale == -12) && (caps[2].raw <= 100)) {
+            capSum += value3;
+            capCount++;
           }
           break;
       }
 
       // Reset ports to defaults
-      SetADCHiz();                        // Input mode
-      SetADCLow();                        // All pins low
+      setAdcHighZ();                        // Input mode
+      setAdcLow();                        // All pins low
       R_DDR = 0;                          // Input mode
       R_PORT = 0;                         // All pins low
       // Display values
-      if(DisplayFlag) {
+      if(displayFlag) {
         lcd_setcursor(0, 2);              // Move to line #2
-        DisplayValue(Val1, 0 , 0);        // Display TP1
+        displayValue(value1, 0 , 0);        // Display TP1
         lcd.write(' ');
-        DisplayValue(Val2, 0 , 0);        // Display TP2
+        displayValue(value2, 0 , 0);        // Display TP2
         lcd.write(' ');
-        DisplayValue(Val3, 0 , 0);        // Display TP3
+        displayValue(value3, 0 , 0);        // Display TP3
       }
 
       // Wait and check test push button
-      if(Counter < 100) {                 // When we don't skip this test
-          DisplayFlag = TestKey();        // Catch key press or timeout
+      if(cnt < 100) {                 // When we don't skip this test
+          displayFlag = testKey();        // Catch key press or timeout
 
         // Short press -> next test / long press -> end selftest
-        if(DisplayFlag > 0) {
-          Counter = 100;                  // Skip current test anyway
-          if(DisplayFlag == 2) Test = 100; // Also skip selftest
+        if(displayFlag > 0) {
+          cnt = 100;                  // Skip current test anyway
+          if(displayFlag == 2) test = 100; // Also skip selftest
         }
       }
-      Counter++;                          // Next run
+      cnt++;                          // Next run
     }
-    Test++;                               // Next one
+    test++;                               // Next one
   }
 
   // Calculate values and offsets
   // Capacitance auto-zero: calculate average value for all probe pairs
-  if(CapCounter == 15) {
+  if(capCount == 15) {
     // Calculate average offset (pF)
-    Config.CapZero = CapSum / CapCounter;
-    Flag++;
+    parameters.capZero = capSum / capCount;
+    flag++;
   }
 
   // Resistance auto-zero: calculate average value for all probes pairs
-  if(RCounter == 15) {
+  if(rCount == 15) {
     // Calculate average offset (0.01 Ohms)
-    Config.RZero = RSum / RCounter;
-    Flag++;
+    parameters.rZero = RSum / rCount;
+    flag++;
   }
 
-  // RiL & RiH
-  if((RiL_Counter == 15) && (RiH_Counter == 15)) {
+  // rIntLow & rIntHigh
+  if((rIntLowCount == 15) && (rIntHighCount == 15)) {
 
-//     Calculate RiL and RiH using the voltage divider rule:
-//     Ri = Rl * (U_Ri / U_Rl)
+//     Calculate rIntLow and rIntHigh using the voltage divider rule:
+//     Ri = rLow * (vRi / vRLow)
 //      - scale up by 100, round up/down and scale down by 10
 
     // Use values multiplied by 3 to increase accuracy
-    U_RiL /= 5;                           // Average sum of 3 U_RiL
-    U_RiH /= 5;                           // Average sum of 3 U_RiH
-    Val1 = (UREF_VCC * 3) - U_RiL - U_RiH; // U_Rl * 3
+    vrIntLow /= 5;                           // Average sum of 3 vrIntLow
+    vRInternalHighl /= 5;                           // Average sum of 3 vRInternalHighl
+    value1 = (VREF_VCC * 3) - vrIntLow - vRInternalHighl; // vRLow * 3
 
-    // RiL, Rl * U_Ri / U_Rl in 0.01 Ohm
-    Val0 = ((unsigned long)R_LOW * 100 * U_RiL) / Val1;
-    Val0 += 5;                            // For automagic rounding
-    Val0 /= 10;                           // Scale down to 0.1 Ohm
-    if(Val0 < 250UL) {                    // < 25 Ohms
-      Config.RiL = (unsigned int)Val0;
-      Flag++;
+    // rIntLow, rLow * vRi / vRLow in 0.01 Ohm
+    value0 = ((unsigned long) R_LOW * 100 * vrIntLow) / value1;
+    value0 += 5;                            // For automagic rounding
+    value0 /= 10;                           // Scale down to 0.1 Ohm
+    if(value0 < 250UL) {                    // < 25 Ohms
+      parameters.rIntLow = (unsigned int) value0;
+      flag++;
     }
 
-    // RiH, Rl * U_Ri / U_Rl in 0.01 Ohm
-    Val0 = ((unsigned long)R_LOW * 100 * U_RiH) / Val1;
-    Val0 += 5;                            // For automagic rounding
-    Val0 /= 10;                           // Scale down to 0.1 Ohm
-    if(Val0 < 280UL) {                    // < 29 Ohms
-      Config.RiH = (unsigned int)Val0;
-      Flag++;
+    // rIntHigh, rLow * vRi / vRLow in 0.01 Ohm
+    value0 = ((unsigned long) R_LOW * 100 * vRInternalHighl) / value1;
+    value0 += 5;                            // For automagic rounding
+    value0 /= 10;                           // Scale down to 0.1 Ohm
+    if(value0 < 280UL) {                    // < 29 Ohms
+      parameters.rIntHigh = (unsigned int) value0;
+      flag++;
     }
   }
 
   // Show values and offsets
-  ShowAdjust();
-  if(Flag == 4) Flag = 1;                 // All adjustments done -> success
-  else Flag = 0;                          // Signal error
-  return Flag;
+  showAdjust();
+  if(flag == 4) flag = 1;                 // All adjustments done -> success
+  else flag = 0;                          // Signal error
+  return flag;
 }
 
 // Show adjustment values and offsets
-void ShowAdjust(void) {
-  // Display RiL and RiH
+void showAdjust(void) {
+  // Display rIntLow and rIntHigh
   lcd_clear();
   lcd.print(F("Ri-"));
   lcd.write(' ');
-  DisplayValue(Config.RiL, -1, LCD_CHAR_OMEGA);
+  displayValue(parameters.rIntLow, -1, LCD_CHAR_OMEGA);
   lcd_setcursor(0, 2);
   lcd.print(F("Ri+"));
   lcd.write(' ');
-  DisplayValue(Config.RiH, -1, LCD_CHAR_OMEGA);
-  TestKey();                              // Let the user read
+  displayValue(parameters.rIntHigh, -1, LCD_CHAR_OMEGA);
+  testKey();                              // Let the user read
 
   // Display C-Zero
   lcd_clear();
   lcd.print(F("C0"));
   lcd.write(' ');
-  DisplayValue(Config.CapZero, -12, 'F'); // Display C0 offset
+  displayValue(parameters.capZero, -12, 'F'); // Display C0 offset
 
   // Display R-Zero
   lcd_setcursor(0, 2);
   lcd.print(F("R0"));
   lcd.write(' ');
-  DisplayValue(Config.RZero, -2, LCD_CHAR_OMEGA); // Display R0
-  TestKey();                              // Let the user read
+  displayValue(parameters.rZero, -2, LCD_CHAR_OMEGA); // Display R0
+  testKey();                              // Let the user read
 
   // Display offset of bandgap reference
   lcd_clear();
   lcd.print(F("Vref"));
   lcd.write(' ');
-  DisplaySignedValue(Config.RefOffset, -3, 'V');
+  displaySignedValue(parameters.refOffset, -3, 'V');
 
   // Display offset of analog comparator
   lcd_setcursor(0, 2);
   lcd.print(F("AComp"));
   lcd.write(' ');
-  DisplaySignedValue(Config.CompOffset, -3, 'V');
-  TestKey();                              // Let the user read
+  displaySignedValue(parameters.compOffset, -3, 'V');
+  testKey();                              // Let the user read
 }
 
 // Update values stored in EEPROM
 void SaveEEP(void) {
   // Ri of µC in low mode
-  EEPROM.updateInt(CONFIG_RIL, Config.RiL);
+  EEPROM.updateInt(PARAM_RIL, parameters.rIntLow);
   // Ri of µC in low mode
-  EEPROM.updateInt(CONFIG_RIL, Config.RiH);
+  EEPROM.updateInt(PARAM_RIL, parameters.rIntHigh);
   // Resistance of probe leads
-  EEPROM.updateInt(CONFIG_RZERO, Config.RZero);
+  EEPROM.updateInt(PARAM_RZERO, parameters.rZero);
   // Capacitance offset: PCB + wiring + probe leads
-  EEPROM.update(CONFIG_RZERO, Config.CapZero);
+  EEPROM.update(PARAM_RZERO, parameters.capZero);
   // Voltage offset of bandgap reference
-  EEPROM.update(CONFIG_REFOFFSET, Config.RefOffset);
+  EEPROM.update(PARAM_REFOFFSET, parameters.refOffset);
   // Voltage offset of analog comparator
-  EEPROM.update(CONFIG_COMPOFFSET, Config.CompOffset);
-  EEPROM.update(CONFIG_MAGIC, ROM_MAGIC);
+  EEPROM.update(PARAM_COMPOFFSET, parameters.compOffset);
+  EEPROM.update(PARAM_MAGIC, ROM_MAGIC);
 }
 
 // Read values stored in EEPROM
 void ReadEEP(void) {
-  Config.RiL = EEPROM.readInt(CONFIG_RIL);
-  Config.RiH = EEPROM.readInt(CONFIG_RIH);
-  Config.RZero = EEPROM.readInt(CONFIG_RZERO);
-  Config.CapZero = EEPROM.read(CONFIG_CAPZERO);
-  Config.RefOffset = EEPROM.read(CONFIG_REFOFFSET);
-  Config.CompOffset = EEPROM.read(CONFIG_COMPOFFSET);
+  parameters.rIntLow = EEPROM.readInt(PARAM_RIL);
+  parameters.rIntHigh = EEPROM.readInt(PARAM_RIH);
+  parameters.rZero = EEPROM.readInt(PARAM_RZERO);
+  parameters.capZero = EEPROM.read(PARAM_CAPZERO);
+  parameters.refOffset = EEPROM.read(PARAM_REFOFFSET);
+  parameters.compOffset = EEPROM.read(PARAM_COMPOFFSET);
 }
 
-void AdjustAndSave(void) {
+void adjustAndSave(void) {
   lcd_clear();
   lcd.print(F("Adjust"));
   lcd_setcursor(0, 1);
   lcd.print(F(" - press button"));
-  TestKey();
+  testKey();
   lcd_setcursor(0, 2);
   lcd.print(F("Adjusting..."));
-  SelfAdjust();
+  selfAdjust();
   lcd_setcursor(0, 1);
   lcd.print(F(" - press button"));
-  TestKey();
+  testKey();
   lcd_clear();
   lcd.print(F("Adjust Done"));
   lcd_setcursor(0, 1);
   lcd.print(F(" - press button"));
-  TestKey();
+  testKey();
   lcd_clear();
   lcd.print(F("Save"));
   lcd_setcursor(0, 1);
@@ -4081,6 +4093,6 @@ void AdjustAndSave(void) {
   lcd.print(F("Done"));
   lcd_setcursor(0, 1);
   lcd.print(F(" - press button"));
-  TestKey();
+  testKey();
   return;
 }
