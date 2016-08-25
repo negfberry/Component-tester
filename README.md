@@ -1,6 +1,8 @@
 # Component-tester
 Component tester for Arduino:
 
+For documentation, see the Wiki.
+
 Test many types of semiconductors, resistors, capacitors, inductors, etc.
 
 Full list:
