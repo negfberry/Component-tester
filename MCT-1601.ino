@@ -23,8 +23,8 @@
  * Source/Hardware:             https://github.com/negfberry/Component-tester/
  */
 
- #define VERSION "0.1"
- #define EC 8
+#define VERSION "0.1"
+#define EC 9
  
 #define DEBUG_PRINT                       // Print on Serial Port
 
@@ -587,14 +587,14 @@ void lcd_setbaud(long int b) {
 }
 
 
-// Setup function
+// Setup
 void setup() {
   byte test;                              // Test value
 
-  pinMode(DISCHARGE_RELAY, OUTPUT);
-  digitalWrite(DISCHARGE_RELAY, HIGH);
+  connectDevice(0);                       // Short out the test points
   lcd.begin(9600);
   lcd_clear();
+  lcd.print(F("   Nikol MCT-1601"));
 
 #ifdef DEBUG_PRINT
   Serial.begin(9600);                     // Serial Output
@@ -615,6 +615,8 @@ void setup() {
   analogReference(EXTERNAL);              // Set Analog Reference to External
 
   // Init
+  runDiagnostics();                       // If it returns, diags. passed, so carry on
+  connectDevice(0);                       // Short out the test points
   loadAdjust();                           // Load adjustment values
 
 #ifdef DEBUG_PRINT
@@ -634,6 +636,7 @@ byte gogohut = 0;
 void loop() {
   byte test;
 
+  connectDevice(0);                       // Turn off relay (discharge DUT)
   pinMode(TEST_BUTTON, INPUT_PULLUP);
   // Reset variables
   check.found = COMP_NONE;
@@ -651,7 +654,7 @@ void loop() {
     lcd_setcursor(0, 1);
     lcd.print(F("Press button to test"));
     lcd_setcursor(0, 2);
-    lcd.print(F("Hold 1s cont. test"));
+    lcd.print(F(" Hold 1s cont. test"));
     lcd_setcursor(0, 3);
     lcd.print(F("Hold 5s to calibrate"));
   }
@@ -660,156 +663,159 @@ void loop() {
   parameters.vBandgap = readVoltage(0x0e, 1); // Dummy read for bandgap stabilization
   parameters.vBandgap = readVoltage(0x0e, 1); // Get voltage of bandgap reference
   parameters.vBandgap += parameters.refOffset; // Add voltage offset
-  if(!gogohut) digitalWrite(DISCHARGE_RELAY, HIGH); // Turn off relay (discharge DUT)
   test = testKey();
+  connectDevice(1);                       // Turn on relay (connect DUT to tester)
   if(test == 2) {                         // Long Press
     wdt_disable();                        // Disable watchdog
     adjustAndSave();                      // Calibrate
-  } else {
-    if(!gogohut) lcd_clear();
-    if(allProbesShorted() == 3) {         // All probes Shorted!
+    return;
+  }  
+  if(!gogohut) lcd_clear();
+  if(allProbesShorted() == 3) {           // All probes Shorted
 #ifdef DEBUG_PRINT
-        Serial.println();
+    Serial.println("Probes shorted. Remove short.");
 #endif
-        lcd.print(F("Remove"));
-        lcd_setcursor(0, 1);
-        lcd.print(F("Short Circuit"));
-      } else {
-        if(!gogohut) lcd_setcursor(0, 1);
-        // Display start of probing
-        digitalWrite(DISCHARGE_RELAY, LOW); // Turn on relay (connect DUT to tester)
-        if(!gogohut) lcd.print(F("Discharging DUT..."));
-        dischargeProbes();
-        if(!gogohut) lcd_setcursor(0, 2);
-        if(!gogohut) lcd.print(F("Testing..."));
-        if(check.found == COMP_ERROR) {   // Discharge failed
-          lcd.print(F("Battery?"));
-          // Display probe number and remaining voltage
-          lcd_setcursor(0, 2);
-          lcd_testpin(check.probe);
-          lcd.write(':');
-          lcd.write(' ');
-          displayValue(check.v, -3, 'V');
-        } else {                          // Skip all other checks
-          // Check all 6 combinations of the 3 probes
-          checkProbes(TP1, TP2, TP3);
-          checkProbes(TP2, TP1, TP3);
-          checkProbes(TP1, TP3, TP2);
-          checkProbes(TP3, TP1, TP2);
-          checkProbes(TP2, TP3, TP1);
-          checkProbes(TP3, TP2, TP1);
-          // If component might be a capacitor
-          if(check.found == COMP_NONE || check.found == COMP_RESISTOR) {
+    lcd_clear();
+    lcd.print(F("  Probes shorted."));
+    lcd_setcursor(0, 1);
+    lcd.print(F("   Remove short."));
+    delay(100);
+    return;
+  }
+  if(!gogohut) lcd_setcursor(0, 1);
+  // Display start of probing
+  if(!gogohut) lcd.print(F("Discharging DUT..."));
+  dischargeProbes();
+  if(!gogohut) {
+    lcd_setcursor(0, 2);
+    lcd.print(F("Testing..."));
+  }
+  if(check.found == COMP_ERROR) {     // Discharge failed
+    lcd_setcursor(0, 1);
+    lcd.print(F("Fail: Battery?"));
+    // Display probe number and remaining voltage
+    lcd_setcursor(0, 2);
+    lcd_testpin(check.probe);
+    lcd.print(F(": "));
+    displayValue(check.v, -3, 'V');
+    lcd_setcursor(4, 3);
+    lcd.print(F("press button"));
+    testKey();
+    return;
+  }
+  // Check all 6 combinations of the 3 probes
+  checkProbes(TP1, TP2, TP3);
+  checkProbes(TP2, TP1, TP3);
+  checkProbes(TP1, TP3, TP2);
+  checkProbes(TP3, TP1, TP2);
+  checkProbes(TP2, TP3, TP1);
+  checkProbes(TP3, TP2, TP1);
+  // If component might be a capacitor
+  if(check.found == COMP_NONE || check.found == COMP_RESISTOR) {
+    // Tell user to be patient with large caps
 #ifdef DEBUG_PRINT
-            Serial.println();
-            Serial.println(F("Wait a moment..."));
+    Serial.println();
+    Serial.println(F("Testing for cap ..."));
 #endif
-            // Tell user to be patient with large caps
-            if(!gogohut)  {
-              lcd_clear_line(2);
-              lcd.print(F("Testing..."));
-              lcd.write(' ');
-              lcd.write('C');
-            }
-            // Check all possible combinations
-            measureCap(TP3, TP1, 0);
-            measureCap(TP3, TP2, 1);
-            measureCap(TP2, TP1, 2);
-          }
-          lcd_clear();
-          // Call output function based on component type
+    if(!gogohut)  {
+      lcd_clear_line(2);
+      lcd.print(F("Testing for cap ..."));
+    }
+    // Check all possible combinations
+    measureCap(TP3, TP1, 0);
+    measureCap(TP3, TP2, 1);
+    measureCap(TP2, TP1, 2);
+  }
+  // Call output function based on component type
 #ifdef DEBUG_PRINT
-          Serial.print(F("Found: "));
-          // Components ID's
-          switch (check.found) {
-            case COMP_ERROR:
-              Serial.println(F("Component Error!"));
-              break;
+  Serial.print(F("Found: "));
+  // Components ID's
+  switch (check.found) {
+    case COMP_ERROR:
+      Serial.println(F("Component Error!"));
+      break;
 
-            case COMP_NONE:
-              Serial.println(F("No Component!"));
-              break;
+    case COMP_NONE:
+      Serial.println(F("No Component!"));
+      break;
 
-            case COMP_RESISTOR:
-              Serial.println(F("Resistor"));
-              break;
+    case COMP_RESISTOR:
+      Serial.println(F("Resistor"));
+      break;
 
-            case COMP_CAPACITOR:
-              Serial.println(F("Capacitor"));
-              break;
+    case COMP_CAPACITOR:
+      Serial.println(F("Capacitor"));
+      break;
 
-            case COMP_INDUCTOR:
-              Serial.println(F("Inductor"));
-              break;
+    case COMP_INDUCTOR:
+      Serial.println(F("Inductor"));
+      break;
 
-            case COMP_DIODE:
-              Serial.println(F("Diode"));
-              break;
+    case COMP_DIODE:
+      Serial.println(F("Diode"));
+      break;
 
-            case COMP_BJT:
-              Serial.println(F("BJT"));
-              break;
+    case COMP_BJT:
+      Serial.println(F("BJT"));
+      break;
 
-            case COMP_FET:
-              Serial.println(F("FET"));
-              break;
+    case COMP_FET:
+      Serial.println(F("FET"));
+      break;
 
-            case COMP_IGBT:
-              Serial.println(F("IGBT"));
-              break;
+    case COMP_IGBT:
+      Serial.println(F("IGBT"));
+      break;
 
-            case COMP_TRIAC:
-              Serial.println(F("TRIAC"));
-              break;
+    case COMP_TRIAC:
+      Serial.println(F("TRIAC"));
+      break;
 
-            case COMP_THYRISTOR:
-              Serial.println(F("Thyristor"));
-              break;
-          }
+    case COMP_THYRISTOR:
+      Serial.println(F("Thyristor"));
+      break;
+  }
 #endif
-          lcd_clear();
-          switch (check.found) {
-            case COMP_ERROR:
-              showError();
-              break;
+  lcd_clear();
+  switch (check.found) {
+    case COMP_ERROR:
+      showError();
+      break;
 
-            case COMP_DIODE:
-              showDiode();
-              break;
+    case COMP_DIODE:
+      showDiode();
+      break;
 
-            case COMP_BJT:
-              showBjt();
-              break;
+    case COMP_BJT:
+      showBjt();
+      break;
 
-            case COMP_FET:
-              showFet();
-              break;
+    case COMP_FET:
+      showFet();
+      break;
 
-            case COMP_IGBT:
-              showIGBT();
-              break;
+    case COMP_IGBT:
+      showIGBT();
+      break;
 
-            case COMP_THYRISTOR:
-              showSpecial();
-              break;
+    case COMP_THYRISTOR:
+      showSpecial();
+      break;
 
-            case COMP_TRIAC:
-              showSpecial();
-              break;
+    case COMP_TRIAC:
+      showSpecial();
+      break;
 
-            case COMP_RESISTOR:
-              showResistor();
-              break;
+    case COMP_RESISTOR:
+      showResistor();
+      break;
 
-            case COMP_CAPACITOR:
-              showCapacitor();
-              break;
+    case COMP_CAPACITOR:
+      showCapacitor();
+      break;
 
-            default:                      // No component found
-              showFail();
-          }
-        }
-     }
+    default:                              // No component found
+      showFail();
   }
   testKey();                              // Let the user read the text
   wdt_disable();                          // Disable watchdog
@@ -876,13 +882,17 @@ byte shortedProbes(byte probe1, byte probe2) {
 
  // Check for a short circuit between all probes
 byte allProbesShorted(void) {
-  byte flag;                              // Return value
-
   // Check all possible combinations
-  flag = shortedProbes(TP1, TP2);
-  flag += shortedProbes(TP1, TP3);
-  flag += shortedProbes(TP2, TP3);
-  return flag;
+  return shortedProbes(TP1, TP2) + shortedProbes(TP1, TP3) + shortedProbes(TP2, TP3);
+}
+
+// Control the DUT relay
+byte connectDevice(boolean state) {
+  pinMode(DISCHARGE_RELAY, OUTPUT);
+  if(state) digitalWrite(DISCHARGE_RELAY, LOW);
+  else digitalWrite(DISCHARGE_RELAY, HIGH);
+  delay(100);
+  return allProbesShorted();
 }
 
 // Try to discharge any connected components, e.g. capacitors
@@ -955,7 +965,7 @@ void dischargeProbes(void) {
       check.v = vNow;                     // Save voltage
       cnt = 0;                            // End loop
     } else {                              // Go for another round
-      wdt_reset();                        // Reset watchdog
+      // wdt_reset();                        // Reset watchdog
       delay(50);                          // Wait for 50ms
     }
   }
@@ -1055,7 +1065,7 @@ void checkProbes(byte probe1, byte probe2, byte probe3) {
 
   // Init
   if(check.found == COMP_ERROR) return;   // Skip check on any error
-  wdt_reset();                            // Reset watchdog
+  // wdt_reset();                            // Reset watchdog
   updateProbes(probe1, probe2, probe3);   // Update bitmasks
 
 //   We measure the current from probe 2 to ground with probe 1 pulled up
@@ -1362,7 +1372,7 @@ void getGateThreshold(byte type) {
   ADMUX = probes.pin3 | (1 << REFS0);     // Select probe-3 for ADC input
   // Sample 10 times
   for (lc = 0; lc < 10; lc++) {
-    wdt_reset();                          // Reset watchdog
+    // wdt_reset();                          // Reset watchdog
     // Discharge gate via rLow for 10 ms
     pullProbe(probes.rLow3Mask, pullMode);
     // Pull up/down gate via rHigh to slowly charge gate
@@ -1442,7 +1452,7 @@ void checkDiode(void) {
   unsigned int v2RHigh;                   // Vf #2 with rHigh pull-up
   unsigned int v2Zero;                    // Vf #2 zero
 
-  wdt_reset();                            // Reset watchdog
+  // wdt_reset();                            // Reset watchdog
   dischargeProbes();                      // Try to discharge probes
   if(check.found == COMP_ERROR) return;   // Skip on error
 
@@ -1973,7 +1983,7 @@ unsigned int smallResistor(byte zeroFlag) {
     // Setup measurement
     if(mode & MODE_HIGH) probe = probes.pin1;
     else probe = probes.pin2;
-    wdt_reset();                          // Reset watchdog
+    // wdt_reset();                          // Reset watchdog
     cnt = 0;                              // Reset loop counter
     value = 0;                            // Reset sample value
 
@@ -2060,7 +2070,7 @@ void checkResistor(void) {
   unsigned int vRHighHigh;                // Voltage #5
   unsigned int vRHighLow;                 // Voltage #6
 
-  wdt_reset();                            // Reset watchdog
+  // wdt_reset();                            // Reset watchdog
 
 //   Resistor measurement
 //    - Set up a voltage divider with well known probe resistors and
@@ -2360,6 +2370,7 @@ byte largeCap(Capacitors *cap) {
   byte flag = 3;                          // Return value
   byte tempByte;                          // Temp. value
   byte mode;                              // Measurement mode
+  byte samples;
   signed char scale;                      // Capacitance scale
   unsigned int tempInt;                   // Temp. value
   unsigned int pulses;                    // Number of charging pulses
@@ -2370,6 +2381,7 @@ byte largeCap(Capacitors *cap) {
   unsigned long value;                    // Corrected capacitance value
   boolean rerun;
 
+  samples = parameters.samples;
   // Setup mode
   mode = FLAG_10MS | FLAG_PULLUP;         // Start with large caps
   do {
@@ -2392,6 +2404,7 @@ byte largeCap(Capacitors *cap) {
 //      The Analog Input Resistance of the ADC is 100MOhm typically.
 
     // Prepare probes
+    parameters.samples = samples;
     dischargeProbes();                    // Try to discharge probes
     if(check.found == COMP_ERROR) return 0; // Skip on error
 
@@ -2401,7 +2414,7 @@ byte largeCap(Capacitors *cap) {
     R_PORT = 0;                           // Set resistor port to low
     R_DDR = 0;                            // Set resistor port to HiZ
     vZero = readVoltage(probes.pin1, 1);  // Get zero voltage (noise)
-
+    parameters.samples = 1;
     // Charge DUT with up to 500 pulses until it reaches 300mV
     pulses = 0;
     tempByte = 1;
@@ -2419,7 +2432,7 @@ byte largeCap(Capacitors *cap) {
 
       // End loop if maximum pulses are reached
       if(pulses == 500) tempByte = 0;
-      wdt_reset();                        // Reset watchdog
+      // wdt_reset();                        // Reset watchdog
     }
 
     // If 300mV are not reached DUT isn't a cap or much too large (>100mF)
@@ -2448,7 +2461,7 @@ byte largeCap(Capacitors *cap) {
       tempInt--;                          // Descrease timeout
       vDrop = readVoltage(probes.pin1, 1); // Get voltage
       vDrop -= vZero;                     // Zero offset
-      wdt_reset();                        // Reset watchdog
+      // wdt_reset();                        // Reset watchdog
     }
 
     // Calculate voltage drop
@@ -2488,6 +2501,7 @@ byte largeCap(Capacitors *cap) {
     cap->raw = raw;
     cap->value = value;                   // Max. 4.3*10^6nF or 100*10^3µF
   }
+  parameters.samples = samples;
   return flag;
 }
 
@@ -2568,7 +2582,7 @@ byte smallCap(Capacitors *cap) {
      if(tempByte & (1 << TOV1)) {
        // Happens at 65.536ms for 1MHz or 8.192ms for 8MHz
        TIFR1 = (1 << TOV1);               // Reset flag
-       wdt_reset();                       // Reset watchdog
+       // wdt_reset();                       // Reset watchdog
        ticks2++;                          // Increase overflow counter
 
        // End loop if charging takes too long (13.1s)
@@ -2849,7 +2863,7 @@ byte measureInductance(uint32_t *time, byte mode) {
      if(test & (1 << TOV1)) {
        // Happens at 65.536ms for 1MHz or 8.192ms for 8MHz
        TIFR1 = (1 << TOV1);               // Reset flag
-       wdt_reset();                       // Reset watchdog
+       // wdt_reset();                       // Reset watchdog
        ticksHigh++;                       // Increase overflow counter
 
        // If it takes too long (0.26s)
@@ -3010,8 +3024,6 @@ void lcd_testpin(unsigned char probe) {
   lcd.write('1' + probe);                 // Send data
 }
 
-// LINT to here
-
 // Display value and unit
 void displayValue(unsigned long value, signed char Exponent, unsigned char Unit) {
   unsigned char prefix = 0;               // Prefix character
@@ -3096,12 +3108,14 @@ void shortCircuit(byte mode) {
   if(d) {
     lcd_clear();
     if(mode == 0) {                       // Remove short
-      lcd.print(F("Remove"));
+      lcd.print(F("  Probes shorted."));
+      lcd_setcursor(0, 1);
+      lcd.print(F("   Remove short."));
     } else {                              // Create short
-      lcd.print(F("Create"));
+      lcd.print(F("  Short all probes"));
+      lcd_setcursor(0, 1);
+      lcd.print(F("     together."));
     }
-    lcd_setcursor(0, 2);
-    lcd.print(F("Short Circuit"));        // Display: short circuit!
     Run = 1;                              // Enter loop
   }
   // Wait until all probes are dis/connected
@@ -3127,7 +3141,11 @@ byte testKey() {
     if(digitalRead(TEST_BUTTON) == LOW) {
       lcd_clear();
       lcd.print(F("Leaving continuous"));
-      while(digitalRead(TEST_BUTTON) == LOW);
+      lcd_setcursor(0, 1);
+       lcd.print(F("   mode. You may"));
+      lcd_setcursor(0, 2);
+       lcd.print(F("release the button"));
+    while(digitalRead(TEST_BUTTON) == LOW);
       delay(1000);
       gogohut = 0;
       return 0;
@@ -3151,20 +3169,20 @@ byte testKey() {
 // Show failed test
 void showFail(void) {
   // Display info
-  lcd.print(F("No or O/C device"));       // Display: No component
+  lcd.print(F("No device or open"));
+  lcd_setcursor(0, 1);
+  lcd.print(F("circuit."));
 }
 
-// Show Error                             //Only for Standalone Version!
+// Show Error
 void showError() {
   if(check.type == TYPE_DISCHARGE)        // Discharge failed
   {
-    lcd.print("Battery?");                // Display: Battery?
-
+    lcd.print(F("Fail: Battery?"));
     // Display probe number and remaining voltage
-    lcd_setcursor(0, 2);
+    lcd_setcursor(0, 1);
     lcd_testpin(check.probe);
-    lcd.write(':');
-    lcd.write(' ');
+    lcd.print(F(": "));
     displayValue(check.v, -3, 'V');
   }
 }
@@ -3384,7 +3402,7 @@ void showBjt(void) {
       diode++;                            // Next one
     }
   }
-  wdt_reset();
+  // wdt_reset();
 }
 
 // Show MOSFET/IGBT extras
@@ -3636,88 +3654,60 @@ void loadAdjust(void) {
 }
 
 // Selftest
-byte SelfTest(void) {
-  byte flag = 0;                          // Return value
+void runDiagnostics(void) {
   byte test = 1;                          // Test counter
   byte cnt;                               // Loop counter
-  byte displayFlag;                       // Display flag
+  byte shorts;                            // Number of probes shorted - 0 or 3 are good
   unsigned int value0;                    // Voltage/value
   // Voltages/values
   signed int value1 = 0, value2 = 0, value3 = 0;
 
-  shortCircuit(1);                        // Make sure all probes are shorted
+  lcd_clear();
+  lcd.print(F("   Nikol MCT-1601"));
+  lcd_setcursor(0, 1);
+  lcd.print(F("Running diagnostics"));
+  lcd_setcursor(0, 2);
+  lcd.print(F("  Please stand by"));
+  shorts = connectDevice(0);              // Make sure DUT probes are shorted
+  if(shorts != 3) {                       // Relay fault - not all probes shorted
+    displayFault(10 + shorts);
+  }
   // Loop through all tests
-  while (test <= 6) {
+  while (test <= 5) {
     cnt = 1;
     // Repeat each test 5 times
-    while (cnt <= 5) {
-      // Display test number
-      lcd_clear();
-      lcd.write('T');                     // Display: T
-      lcd.write('0' + test);              // Display test number
-      lcd.write(' ');
-      displayFlag = 1;                    // Display values by default
+    while (cnt < 5) {
       // Tests
       switch (test) {
-        case 1:                           // Reference voltage
-          value0 = readVoltage(0x0e, 1);  // Dummy read for bandgap stabilization
-          value0 = readVoltage(0x0e, 1);  // Read bandgap reference voltage
-          lcd.print(F("Vref"));
-          lcd_setcursor(0, 2);
-          displayValue(value0, -3, 'V');  // Display voltage in mV
-          displayFlag = 0;                // Reset flag
+        case 1:                           // Resistance of probe leads (probes shorted)
+           // The resistance is for two probes in series and we expect it to be
+           // smaller than 1.00 Ohms, i.e. 0.50 Ohms for a single probe
+          updateProbes(TP2, TP1, 0);
+          value1 = smallResistor(0);
+          if(value1 >= 100) {             // Too high, > 1.0 ohm
+            displayFault(1);
+          }
+          updateProbes(TP3, TP1, 0);
+          value2 = smallResistor(0);
+          if(value2 >= 100) {             // Too high, > 1.0 ohm
+            displayFault(2);
+          }
+          updateProbes(TP3, TP2, 0);
+          value3 = smallResistor(0);
+          if(value3 >= 100) {             // Too high, > 1.0 ohm
+            displayFault(3);
+          }
           break;
 
-        case 2:                           // Compare rLow resistors (probes still shorted)
-          lcd.print(F("+rLow-"));
-          lcd.write(' ');
-          lcd.print(F("12 13 23"));
-          // Set up a voltage divider with the rLow's, substract theoretical voltage of voltage divider
-          // TP1: Gnd -- rLow -- probe-2 -- probe-1 -- rLow -- Vcc
-          R_PORT = 1 << (TP1 * 2);
-          R_DDR = (1 << (TP1 * 2)) | (1 << (TP2 * 2));
-          value1 = readVoltage20ms(TP3);
-          value1 -= ((long)VREF_VCC * (R_MCU_LOW + R_LOW)) / (R_MCU_LOW + R_LOW + R_LOW + R_MCU_HIGH);
-          // TP1: Gnd -- rLow -- probe-3 -- probe-1 -- rLow -- Vcc
-          R_DDR = (1 << (TP1 * 2)) | (1 << (TP3 * 2));
-          value2 = readVoltage20ms(TP2);
-          value2 -= ((long)VREF_VCC * (R_MCU_LOW + R_LOW)) / (R_MCU_LOW + R_LOW + R_LOW + R_MCU_HIGH);
-          // TP1: Gnd -- rLow -- probe-3 -- probe-2 -- rLow -- Vcc
-          R_PORT = 1 << (TP2 * 2);
-          R_DDR = (1 << (TP2 * 2)) | (1 << (TP3 * 2));
-          value3 = readVoltage20ms(TP2);
-          value3 -= ((long)VREF_VCC * (R_MCU_LOW + R_LOW)) / (R_MCU_LOW + R_LOW + R_LOW + R_MCU_HIGH);
-          break;
-
-        case 3:                           // Compare RHigh resistors (probes still shorted)
-          lcd.print(F("+RHigh-"));
-          lcd.write(' ');
-          lcd.print(F("12 13 23"));
-          // Set up a voltage divider with the RHigh's
-          // TP1: Gnd -- RHigh -- probe-2 -- probe-1 -- RHigh -- Vcc
-          R_PORT = 2 << (TP1 * 2);
-          R_DDR = (2 << (TP1 * 2)) | (2 << (TP2 * 2));
-          value1 = readVoltage20ms(TP3);
-          value1 -= (VREF_VCC / 2);
-          // TP1: Gnd -- RHigh -- probe-3 -- probe-1 -- RHigh -- Vcc
-          R_DDR = (2 << (TP1 * 2)) | (2 << (TP3 * 2));
-          value2 = readVoltage20ms(TP2);
-          value2 -= (VREF_VCC / 2);
-          // TP1: Gnd -- RHigh -- probe-3 -- probe-2 -- RHigh -- Vcc
-          R_PORT = 2 << (TP2 * 2);
-          R_DDR = (2 << (TP2 * 2)) | (2 << (TP3 * 2));
-          value3 = readVoltage20ms(TP1);
-          value3 -= (VREF_VCC / 2);
-          break;
-
-        case 4:                           // Un-short probes
-          shortCircuit(0);                // Make sure probes are not shorted
+        case 2:                           // Un-short probes
+          shorts = connectDevice(1);      // Make sure DUT probes are not shorted
+          if(shorts != 0) {               // Relay fault - some probes are shorted
+            displayFault(20 + shorts);
+          }
           cnt = 100;                      // Skip test
-          displayFlag = 0;                // Reset flag
           break;
 
-        case 5:                           // RHigh resistors pulled down
-          lcd.print(F("RHigh-"));
+        case 3:                           // RHigh resistors pulled down
           // TP1: Gnd -- RHigh -- probe
           R_PORT = 0;
           R_DDR = 2 << (TP1 * 2);
@@ -3730,8 +3720,7 @@ byte SelfTest(void) {
           value3 = readVoltage20ms(TP3);
           break;
 
-        case 6:                           // RHigh resistors pulled up
-          lcd.print(F("RHigh+"));
+        case 4:                           // RHigh resistors pulled up
           // TP1: probe -- RHigh -- Vcc
           R_DDR = 2 << (TP1 * 2);
           R_PORT = 2 << (TP1 * 2);
@@ -3745,36 +3734,90 @@ byte SelfTest(void) {
           R_PORT = 2 << (TP3 * 2);
           value3 = readVoltage20ms(TP3);
           break;
-      }
 
+        case 5:                           // Capacitance offset (PCB and probe leads)
+          // The capacitance is for two probes and we expect it to be less than 100pF.
+          measureCap(TP2, TP1, 0);
+          value1 = (unsigned int)caps[0].raw;
+          measureCap(TP3, TP1, 1);
+          value2 = (unsigned int)caps[1].raw;
+          measureCap(TP3, TP2, 2);
+          value3 = (unsigned int)caps[2].raw;
+          break;
+      }
       // Reset ports to defaults
       R_DDR = 0;                          // Input mode
       R_PORT = 0;                         // All pins low
-
-      // Display voltages/values of all probes
-      if(displayFlag) {
-        lcd_setcursor(0, 2);              // Move to line #2
-        displaySignedValue(value1, 0 , 0); // Display TP1
-        lcd.write(' ');
-        displaySignedValue(value2, 0 , 0); // Display TP2
-        lcd.write(' ');
-        displaySignedValue(value3, 0 , 0); // Display TP3
-      }
-      // Wait and check test push button
-      if(cnt < 100) {                     // When we don't skip this test
-          displayFlag = testKey();        // Catch key press or timeout
-        // Short press -> next test / long press -> end selftest
-        if(displayFlag > 0) {
-          cnt = 100;                      // Skip current test anyway
-          if(displayFlag == 2) test = 100; // Also skip selftest
-        }
-      }
       cnt++;                              // Next run
     }
     test++;                               // Next one
   }
-  flag = 1;                               // Signal success
-  return flag;
+  return;                                 // Success (if it fails, displayFault() never returns).
+}
+
+// Diagnostic failure report
+void displayFault(byte fail) {
+  lcd_clear();
+  lcd.print(F("Diagnostic FAIL:"));
+  lcd_setcursor(0, 1);
+  switch(fail) {
+    case 1:
+    case 2:
+    case 3:
+      lcd.print(F("Series resistance"));
+      lcd_setcursor(0, 2);
+      lcd.print(F("too high probe "));
+      lcd.write((char) '0' + fail);
+      break;
+
+    case 4:
+    case 5:
+    case 6:
+      lcd.print(F("Probe voltage Vcc"));
+      lcd_setcursor(0, 2);
+      lcd.print(F("too low probe "));
+      lcd.write((char) '0' + fail - 3);
+      break;
+
+    case 7:
+    case 8:
+    case 9:
+      lcd.print(F("Probe voltage Ground"));
+      lcd_setcursor(0, 2);
+      lcd.print(F("too high probe "));
+      lcd.write((char) '0' + fail - 6);
+      break;
+
+    case 10:
+    case 11:
+    case 12:
+      lcd.print(F("Relay failure short"));
+      lcd_setcursor(0, 2);
+      lcd.print(F("mode - "));
+      lcd.write((char) '0' + fail - 10);
+      lcd.print(F(" open"));
+      break;
+
+    case 13:
+    case 14:
+    case 15:
+      lcd.print(F("Probe capacitance"));
+      lcd_setcursor(0, 2);
+      lcd.print(F("too high probe "));
+      lcd.write((char) '0' + fail - 12);
+      break;
+
+    case 21:
+    case 22:
+    case 23:
+      lcd.print(F("Relay failure open"));
+      lcd_setcursor(0, 2);
+      lcd.print(F("mode - "));
+      lcd.write((char) '0' + fail - 20);
+      lcd.print(F(" shorted"));
+      break;
+  }
+  for(;;) delay(1000);
 }
 
 // Self adjustment
@@ -3805,7 +3848,7 @@ byte selfAdjust(void) {
     while (cnt <= 5) {
       // Display test number
       lcd_clear();
-      lcd.print("Calibration ");                     // Display: a
+      lcd.print(F("Calibration "));                     // Display: a
       lcd.write('0' + test);              // Display number
       displayFlag = 1;                    // Display values by default
 
@@ -3825,7 +3868,7 @@ byte selfAdjust(void) {
           }
           updateProbes(TP3, TP1, 0);
           value2 = smallResistor(0);
-          if(value2 < 100) {              // Whithin limit
+          if(value2 < 100) {              // Within limit
             RSum += value2;
             rCount++;
           }
