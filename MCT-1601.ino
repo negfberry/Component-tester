@@ -24,9 +24,9 @@
  */
 
 #define VERSION "0.1"
-#define EC 9
+#define EC 12
  
-#define DEBUG_PRINT                       // Print on Serial Port
+// #define DEBUG_PRINT                       // Print on Serial Port
 
 // Button press times in deciseconds (from ButtonCtl library)
 #define SEC1_PRESS 10                     // Button Long Press
@@ -44,8 +44,10 @@
 #define TP3 2                             // Test pin 3 (=2)
 #define R_PORT PORTB                      // Port data register
 #define R_DDR DDRB                        // Port data direction register
+#define CALIB_BUTTON 4                    // Test/start push button (active low)
+#define CONT_BUTTON 5                     // Test/start push button (active low)
 #define TEST_BUTTON 6                     // Test/start push button (active low)
-#define DISCHARGE_RELAY 7                 // Discharge relay (active low)
+#define PROT_RELAY 7                      // Discharge relay (active low)
 #define TXPIN 2                           // LCD serial transmit
 
 // ADC voltage reference based on Vcc (in mV).
@@ -291,136 +293,216 @@ Bjts bjt;                                 // Bipolar junction transistor
 Fets fet;                                 // FET
 Inductors inductor;                       // Inductor
 
-const byte symLOW1[8]   PROGMEM = { B00000000, B00000000, B00000000, B00010000,
-                                    B00010010, B00010101, B00010101, B00011010 };
 
-const byte symLOW2[8]   PROGMEM = { B00000000, B00000000, B00000000, B00000000,
-                                    B00010001, B00010001, B00010101, B00001010 };
+const byte symProt1[8]    PROGMEM = { B00000000, B00000000, B00000000, B00000000,
+                                      B00000000, B00011100, B00000100, B00000100 };
 
-const byte symR[8]      PROGMEM = { B00000000, B00000000, B00011000, B00010100,
-                                    B00010100, B00011000, B00010100, B00010100 };
+const byte symProt2N[8]   PROGMEM = { B00000100, B00000100, B00000100, B00011111,
+                                      B00001110, B00001110, B00000100, B00000100 };
 
-const byte symF[8]      PROGMEM = { B00000000, B00000000, B00011100, B00010000,
-                                    B00010000, B00011000, B00010000, B00010000 };
+const byte symProt2P[8]   PROGMEM = { B00000100, B00000100, B00000100, B00011111,
+                                      B00001110, B00001110, B00000100, B00000100 };
 
-const byte symRES1[8]   PROGMEM = { B00000100, B00000100, B00000100, B00000100,
-                                    B00011111, B00010001, B00010001, B00010001 };
+const byte symProt3[8]    PROGMEM = { B00000100, B00000100, B00000100, B00011100,
+                                      B00000000, B00000000, B00000000, B00000000 };
 
-const byte symRES2[8]   PROGMEM = { B00010001, B00010001, B00010001, B00010001,
-                                    B00011111, B00000100, B00000100, B00000100 };
+const byte symLOW1[8]     PROGMEM = { B00000000, B00000000, B00000000, B00010000,
+                                      B00010010, B00010101, B00010101, B00011010 };
 
-const byte symCAP1[8]   PROGMEM = { B00000000, B00000100, B00000100, B00000100,
-                                    B00000100, B00000100, B00011111, B00011111 };
+const byte symLOW2[8]     PROGMEM = { B00000000, B00000000, B00000000, B00000000,
+                                      B00010001, B00010001, B00010101, B00001010 };
 
-const byte symCAP2[8]   PROGMEM = { B00011111, B00011111, B00000100, B00000100,
-                                    B00000100, B00000100, B00000100, B00000000 };
+const byte symR[8]        PROGMEM = { B00000000, B00000000, B00011000, B00010100,
+                                      B00010100, B00011000, B00010100, B00010100 };
 
-const byte symFE[8]     PROGMEM = { B00000000, B00000000, B00000000, B00011011,
-                                    B00010010, B00011011, B00010010, B00010011 };
+const byte symF[8]        PROGMEM = { B00000000, B00000000, B00011100, B00010000,
+                                      B00010000, B00011000, B00010000, B00010000 };
 
-const byte symBE1[8]    PROGMEM = { B00000000, B00000000, B00000000, B00000110,
-                                    B00000101, B00000110, B00000101, B00000110 };
+const byte symRES1[8]     PROGMEM = { B00000100, B00000100, B00000100, B00000100,
+                                      B00011111, B00010001, B00010001, B00010001 };
 
-const byte symBE2[8]    PROGMEM = { B00000000, B00000000, B00000000, B00011100,
-                                    B00010000, B00011100, B00010000, B00011100 };
+const byte symRES2[8]     PROGMEM = { B00010001, B00010001, B00010001, B00010001,
+                                      B00011111, B00000100, B00000100, B00000100 };
 
-const byte symCE1[8]    PROGMEM = { B00000000, B00000000, B00000000, B00011101,
-                                    B00010001, B00010001, B00010001, B00011101 };
+const byte symCAP1[8]     PROGMEM = { B00000000, B00000100, B00000100, B00000100,
+                                      B00000100, B00000100, B00011111, B00011111 };
 
-const byte symCE2[8]    PROGMEM = { B00000000, B00000000, B00000000, B00010111,
-                                    B00000101, B00010101, B00000101, B00010111 };
+const byte symCAP2[8]     PROGMEM = { B00011111, B00011111, B00000100, B00000100,
+                                      B00000100, B00000100, B00000100, B00000000 };
 
-const byte symNPN[8]    PROGMEM = { B00000001, B00010010, B00010100, B00011000,
-                                    B00011000, B00010100, B00010011, B00000011 };
+const byte symFE[8]       PROGMEM = { B00000000, B00000000, B00000000, B00011011,
+                                      B00010010, B00011011, B00010010, B00010011 };
 
-const byte symPNP[8]    PROGMEM = { B00000001, B00010010, B00011100, B00011100,
-                                    B00011000, B00010100, B00010010, B00000001 };
+const byte symBE1[8]      PROGMEM = { B00000000, B00000000, B00000000, B00000110,
+                                      B00000101, B00000110, B00000101, B00000110 };
 
-const byte symIND1[8]   PROGMEM = { B00000100, B00000100, B00000100, B00000100,
-                                    B00011111, B00011111, B00011111, B00011111 };
+const byte symBE2[8]      PROGMEM = { B00000000, B00000000, B00000000, B00011100,
+                                      B00010000, B00011100, B00010000, B00011100 };
 
-const byte symIND2[8]   PROGMEM = { B00011111, B00011111, B00011111, B00011111,
-                                    B00011111, B00000100, B00000100, B00000100 };
+const byte symCE1[8]      PROGMEM = { B00000000, B00000000, B00000000, B00011101,
+                                      B00010001, B00010001, B00010001, B00011101 };
 
-const byte symDIODE1[8] PROGMEM = { B00000100, B00000100, B00000100, B00011111,
-                                    B00001110, B00001110, B00000100, B00011111 };
+const byte symCE2[8]      PROGMEM = { B00000000, B00000000, B00000000, B00010111,
+                                      B00000101, B00010101, B00000101, B00010111 };
 
-#define symTHY1 symDIODE1
+const byte symNPN[8]      PROGMEM = { B00000001, B00010010, B00010100, B00011000,
+                                      B00011000, B00010100, B00010011, B00000011 };
 
-const byte symDIODE2[8] PROGMEM = { B00000100, B00000100, B00000100, B00000100,
-                                    B00000000, B00000000, B00000000, B00000000 };
+const byte symPNP[8]      PROGMEM = { B00000001, B00010010, B00011100, B00011100,
+                                      B00011000, B00010100, B00010010, B00000001 };
 
-const byte symTHY2[8]   PROGMEM = { B00000100, B00001100, B00010100, B00000100,
-                                    B00000000, B00000000, B00000000, B00000000 };
+const byte symIND1[8]     PROGMEM = { B00000100, B00000100, B00000100, B00000100,
+                                      B00011111, B00011111, B00011111, B00011111 };
 
-const byte symTHY3[8]   PROGMEM = { B00000000, B00000000, B00011111, B00000000,
-                                    B00000000, B00000000, B00000000, B00000000 };
+const byte symIND2[8]     PROGMEM = { B00011111, B00011111, B00011111, B00011111,
+                                      B00011111, B00000100, B00000100, B00000100 };
 
-const byte symTRI1[8]   PROGMEM = { B00000001, B00000001, B00000001, B00011111,
-                                    B00000100, B00001110, B00001110, B00011111 };
+const byte symDIODESA[8]  PROGMEM = { B00000100, B00000100, B00000100, B00000100,
+                                      B00000100, B00000100, B00000100, B00000100 };
 
-const byte symTRI2[8]   PROGMEM = { B00000000, B00000000, B00000000, B00011111,
-                                    B00001110, B00001110, B00000100, B00011111 };
+const byte symDIODECA1[8] PROGMEM = { B00000001, B00000001, B00000001, B00000001,
+                                      B00000001, B00000111, B00000100, B00000100 };
 
-const byte symTRI3[8]   PROGMEM = { B00000101, B00000101, B00001001, B00011001,
-                                    B00000001, B00000001, B00000001, B00000001 };
+const byte symDIODECA2[8] PROGMEM = { B00000000, B00000000, B00000000, B00000000,
+                                      B00000000, B00011100, B00000100, B00000100 };
 
-const byte symFet[8]    PROGMEM = { B00000010, B00010010, B00011110, B00010000,
-                                    B00010000, B00011110, B00010010, B00000010 };
+const byte symDIODEAK[8]  PROGMEM = { B00000100, B00000100, B00011111, B00001110,
+                                      B00001110, B00000100, B00011111, B00000100 };
 
-const byte symNFetG[8]  PROGMEM = { B00000000, B00000000, B00000000, B00000000,
-                                    B00000010, B00011111, B00000010, B00000000 };
+const byte symDIODEKA[8]  PROGMEM = { B00000100, B00000100, B00011111, B00000100,
+                                      B00001110, B00001110, B00011111, B00000100 };
 
-const byte symPFetG[8]  PROGMEM = { B00000000, B00000010, B00011111, B00000010,
-                                    B00000000, B00000000, B00000000, B00000000 };
+const byte symDIODEZ[8]   PROGMEM = { B00000100, B00000101, B00011111, B00010100,
+                                      B00001110, B00001110, B00011111, B00000100 };
 
-const byte symPFetD[8]  PROGMEM = { B00000010, B00000010, B00000010, B00011000,
-                                    B00010100, B00010100, B00010100, B00011000 };
+const byte symDIODESK[8]  PROGMEM = { B00000100, B00000100, B00000100, B00000100,
+                                      B00000100, B00000100, B00000100, B00000100 };
 
-const byte symNFetD[8]  PROGMEM = { B00011000, B00010100, B00010100, B00010100,
-                                    B00011000, B00000010, B00000010, B00000010 };
+const byte symDIODECK1[8] PROGMEM = { B00000100, B00000100, B00000111, B00000001,
+                                      B00000001, B00000001, B00000001, B00000001 };
 
-const byte symPFetS[8]  PROGMEM = { B00001100, B00010000, B00001000, B00000100,
-                                    B00011000, B00000010, B00000010, B00000010 };
+const byte symDIODECK2[8] PROGMEM = { B00000100, B00000100, B00011100, B00000000,
+                                      B00000000, B00000000, B00000000, B00000000 };
 
-const byte symNFetS[8]  PROGMEM = { B00000010, B00000010, B00000010, B00001100,
-                                    B00010000, B00001000, B00000100, B00011000 };
+const byte symTHY1[8]  PROGMEM =    { B00000100, B00000100, B00000100, B00011111,
+                                      B00001110, B00001110, B00000100, B00011111 };
 
-const byte symJFetT[8]  PROGMEM = { B00000000, B00000000, B00000000, B00000000,
-                                    B00000000, B00000010, B00000010, B00000010 };
+const byte symTHY2[8]     PROGMEM = { B00000100, B00001100, B00010100, B00000100,
+                                      B00000100, B00000100, B00000100, B00000100 };
 
-const byte symJFetB[8]  PROGMEM = { B00000010, B00000010, B00000010, B00000000,
-                                    B00000000, B00000000, B00000000, B00000000 };
+const byte symTHY3[8]     PROGMEM = { B00000000, B00000000, B00011111, B00000000,
+                                      B00000000, B00000000, B00000000, B00000000 };
 
-const byte symH[8]      PROGMEM = { B00010000, B00010110, B00011001, B00010001,
-                                    B00010001, B00010001, B00000000, B00000000 };
+const byte symTRI1[8]     PROGMEM = { B00000001, B00000001, B00000001, B00011111,
+                                      B00000100, B00001110, B00001110, B00011111 };
 
-const byte symV[8]      PROGMEM = { B00010001, B00010001, B00010001, B00010001,
-                                    B00001010, B00000100, B00000000, B00000000 };
+const byte symTRI2[8]     PROGMEM = { B00000000, B00000000, B00000000, B00011111,
+                                      B00001110, B00001110, B00000100, B00011111 };
 
-const byte symI[8]      PROGMEM = { B00001110, B00000100, B00000100, B00000100,
-                                    B00000100, B00001110, B00000000, B00000000 };
+const byte symTRI3[8]     PROGMEM = { B00000101, B00000101, B00001001, B00011001,
+                                      B00000001, B00000001, B00000001, B00000001 };
 
-const byte symIGBT1[8]  PROGMEM = { B00000000, B00000000, B00000000, B00000000,
-                                    B00000000, B00000000, B00000001, B00000010 };
+const byte symFet[8]      PROGMEM = { B00000010, B00010010, B00011110, B00010000,
+                                      B00010000, B00011110, B00010010, B00000010 };
 
-const byte symIGBT2[8]  PROGMEM = { B00010000, B00010000, B00010000, B00010000,
-                                    B00010000, B00010000, B00011100, B00000100 };
+const byte symNFetG[8]    PROGMEM = { B00000000, B00000000, B00000000, B00000000,
+                                      B00000010, B00011111, B00000010, B00000000 };
 
-const byte symIGBT3[8]  PROGMEM = { B00000000, B00000001, B00000001, B00000001,
-                                    B00000001, B00000001, B00011111, B00000000 };
+const byte symPFetG[8]    PROGMEM = { B00000000, B00000010, B00011111, B00000010,
+                                      B00000000, B00000000, B00000000, B00000000 };
 
-const byte symIGBT4[8]  PROGMEM = { B00010010, B00010100, B00011000, B00010000,
-                                    B00010000, B00011000, B00010100, B00000010 };
+const byte symPFetD[8]    PROGMEM = { B00000010, B00000010, B00000010, B00011000,
+                                      B00010100, B00010100, B00010100, B00011000 };
 
-const byte symIGBT5[8]  PROGMEM = { B00000100, B00000100, B00011111, B00000100,
-                                    B00001110, B00001110, B00011111, B00000100 };
+const byte symNFetD[8]    PROGMEM = { B00011000, B00010100, B00010100, B00010100,
+                                      B00011000, B00000010, B00000010, B00000010 };
 
-const byte symIGBT6[8]  PROGMEM = { B00000011, B00000011, B00000000, B00000000,
-                                    B00000000, B00000000, B00000000, B00000000 };
+const byte symPFetS[8]    PROGMEM = { B00001100, B00010000, B00001000, B00000100,
+                                      B00011000, B00000010, B00000010, B00000010 };
 
-const byte symIGBT7[8]  PROGMEM = { B00000100, B00000100, B00011100, B00010000,
-                                    B00010000, B00010000, B00010000, B00010000 };
+const byte symNFetS[8]    PROGMEM = { B00000010, B00000010, B00000010, B00001100,
+                                      B00010000, B00001000, B00000100, B00011000 };
+
+const byte symJFetT[8]    PROGMEM = { B00000000, B00000000, B00000000, B00000000,
+                                      B00000000, B00000010, B00000010, B00000010 };
+
+const byte symJFetB[8]    PROGMEM = { B00000010, B00000010, B00000010, B00000000,
+                                      B00000000, B00000000, B00000000, B00000000 };
+
+const byte symMosFet1[8]  PROGMEM = { B00000000, B00000000, B00000000, B00000000,
+                                      B00000000, B00000001, B00000001, B00000101 };
+
+const byte symMosFet2[8]  PROGMEM = { B00000000, B00000000, B00000001, B00000001,
+                                      B00000001, B00000001, B00000001, B00011111 };
+
+const byte symMosFet3[8]  PROGMEM = { B00000000, B00000000, B00000000, B00000000,
+                                      B00011111, B00000000, B00000000, B00000000 };
+
+const byte symMosFet4D[8] PROGMEM = { B00000101, B00000101, B00000101, B00000101,
+                                      B00011101, B00000101, B00000101, B00000101 };
+
+const byte symMosFet4E[8] PROGMEM = { B00000101, B00000100, B00000100, B00000101,
+                                      B00011101, B00000101, B00000100, B00000100 };
+
+const byte symMosFet5N[8] PROGMEM = { B00000000, B00000000, B00000100, B00001100,
+                                      B00011111, B00001101, B00000101, B00000001 };
+
+const byte symMosFet5P[8] PROGMEM = { B00000001, B00000001, B00001001, B00001101,
+                                      B00011111, B00001100, B00001000, B00000000 };
+
+const byte symMosFet6[8]  PROGMEM = { B00000101, B00000101, B00000001, B00000001,
+                                      B00000000, B00000000, B00000000, B00000000 };
+
+const byte symMosFet7N[8] PROGMEM = { B00000001, B00011111, B00000001, B00000001,
+                                      B00000001, B00000001, B00000001, B00000001 };
+
+const byte symMosFet7P[8] PROGMEM = { B00000000, B00011111, B00000001, B00000001,
+                                      B00000001, B00000001, B00000001, B00000001 };
+
+const byte symH[8]        PROGMEM = { B00010000, B00010110, B00011001, B00010001,
+                                      B00010001, B00010001, B00000000, B00000000 };
+
+const byte symV[8]        PROGMEM = { B00010001, B00010001, B00010001, B00010001,
+                                      B00001010, B00000100, B00000000, B00000000 };
+
+const byte symI[8]        PROGMEM = { B00001110, B00000100, B00000100, B00000100,
+                                      B00000100, B00001110, B00000000, B00000000 };
+
+const byte symIGBT1[8]    PROGMEM = { B00000000, B00000000, B00000000, B00000000,
+                                      B00000000, B00000000, B00000001, B00000010 };
+
+const byte symIGBT2[8]    PROGMEM = { B00010000, B00010000, B00010000, B00010000,
+                                      B00010000, B00010000, B00011100, B00000100 };
+
+const byte symIGBT3[8]    PROGMEM = { B00000000, B00000001, B00000001, B00000001,
+                                      B00000001, B00000001, B00011111, B00000000 };
+
+const byte symIGBT4[8]    PROGMEM = { B00010010, B00010100, B00011000, B00010000,
+                                      B00010000, B00011000, B00010100, B00000010 };
+
+const byte symIGBT5[8]    PROGMEM = { B00000100, B00000100, B00011111, B00000100,
+                                      B00001110, B00001110, B00011111, B00000100 };
+
+const byte symIGBT6[8]    PROGMEM = { B00000011, B00000011, B00000000, B00000000,
+                                      B00000000, B00000000, B00000000, B00000000 };
+
+const byte symIGBT7[8]    PROGMEM = { B00000100, B00000100, B00011100, B00010000,
+                                      B00010000, B00010000, B00010000, B00010000 };
+
+const byte symC[8]        PROGMEM = { B00001110, B00010001, B00010000, B00010000,
+                                      B00010001, B00001110, B00000000, B00000000 };
+
+const byte symGS1[8]      PROGMEM = { B00000000, B00000000, B00000000, B00001110,
+                                      B00010010, B00001110, B00000010, B00001100 };
+
+const byte SYMGS2[8]      PROGMEM = { B00000000, B00000000, B00000000, B00001110,
+                                      B00010000, B00001100, B00000010, B00011100 };
+
+const byte symTH1[8]      PROGMEM = { B00000000, B00000000, B00000000, B00001000,
+                                      B00011100, B00001000, B00001010, B00000100 };
+
+const byte symTH2[8]      PROGMEM = { B00000000, B00000000, B00000000, B00010000,
+                                      B00010000, B00011000, B00010100, B00010100 };
 
 // Prefix Table
 //                                     -12  -9   -6              -3   0  +3   +6
@@ -454,6 +536,8 @@ const unsigned char adcTable[]  = { (1 << TP1), (1 << TP2), (1 << TP3) };
 
 SoftwareSerial lcd(-1, TXPIN);
 ButtonCtl testButton(TEST_BUTTON);
+ButtonCtl caliButton(CALIB_BUTTON);
+ButtonCtl contButton(CONT_BUTTON);
 
 // Define character, Newhaven Displays LCD
 // Will convert later to 4WireLCD
@@ -586,6 +670,14 @@ void lcd_setbaud(long int b) {
   lcd.write(r);
 }
 
+void initHw(void) {
+  // Setup µC
+  ADCSRA = (1 << ADEN) | ADC_CLOCK_DIV;   // Enable ADC and set clock divider
+  MCUSR &= ~(1 << WDRF);                  // Reset watchdog flag
+  DIDR0 = B00110111;                      // DIDR0 Digital Input Disable Register 0
+                                          // - Disable digital input on analog pins
+  wdt_disable();                          // Disable watchdog
+}
 
 // Setup
 void setup() {
@@ -601,12 +693,7 @@ void setup() {
 #endif
 
   // Setup µC
-  ADCSRA = (1 << ADEN) | ADC_CLOCK_DIV;   // Enable ADC and set clock divider
-  MCUSR &= ~(1 << WDRF);                  // Reset watchdog flag
-  DIDR0 = B00110111;                      // DIDR0 Digital Input Disable Register 0
-                                          // - Disable digital input on analog pins
-  wdt_disable();                          // Disable watchdog
-  // Default offsets and values
+  initHw();                               // Default offsets and values
   parameters.samples = ADC_SAMPLES;       // Number of ADC samples
   parameters.refFlag = 1;                 // No ADC reference set yet
   delay(100);
@@ -635,6 +722,7 @@ byte gogohut = 0;
 // Main loop
 void loop() {
   byte test;
+  byte isDarlington = 1;
 
   connectDevice(0);                       // Turn off relay (discharge DUT)
   pinMode(TEST_BUTTON, INPUT_PULLUP);
@@ -651,12 +739,6 @@ void loop() {
   if(!gogohut) {
     lcd_clear();
     lcd.print(F("   Nikol MCT-1601"));
-    lcd_setcursor(0, 1);
-    lcd.print(F("Press button to test"));
-    lcd_setcursor(0, 2);
-    lcd.print(F(" Hold 1s cont. test"));
-    lcd_setcursor(0, 3);
-    lcd.print(F("Hold 5s to calibrate"));
   }
   
   // Internal bandgap reference
@@ -670,7 +752,7 @@ void loop() {
     adjustAndSave();                      // Calibrate
     return;
   }  
-  if(!gogohut) lcd_clear();
+ // if(!gogohut) lcd_clear();
   if(allProbesShorted() == 3) {           // All probes Shorted
 #ifdef DEBUG_PRINT
     Serial.println("Probes shorted. Remove short.");
@@ -682,9 +764,7 @@ void loop() {
     delay(100);
     return;
   }
-  if(!gogohut) lcd_setcursor(0, 1);
   // Display start of probing
-  if(!gogohut) lcd.print(F("Discharging DUT..."));
   dischargeProbes();
   if(!gogohut) {
     lcd_setcursor(0, 2);
@@ -704,12 +784,33 @@ void loop() {
     return;
   }
   // Check all 6 combinations of the 3 probes
+  check.subtype = 0;
   checkProbes(TP1, TP2, TP3);
+  if(check.subtype == TYPE_REGULAR)
+    isDarlington = 0;
+  check.subtype = 0;
   checkProbes(TP2, TP1, TP3);
+  if(check.subtype == TYPE_REGULAR)
+    isDarlington = 0;
+  check.subtype = 0;
   checkProbes(TP1, TP3, TP2);
+  if(check.subtype == TYPE_REGULAR)
+    isDarlington = 0;
+  check.subtype = 0;
   checkProbes(TP3, TP1, TP2);
+  if(check.subtype == TYPE_REGULAR)
+    isDarlington = 0;
+  check.subtype = 0;
   checkProbes(TP2, TP3, TP1);
+  if(check.subtype == TYPE_REGULAR)
+    isDarlington = 0;
+  check.subtype = 0;
   checkProbes(TP3, TP2, TP1);
+  if(check.subtype == TYPE_REGULAR)
+    isDarlington = 0;
+  if(isDarlington) check.subtype = TYPE_DARLINGTON;
+  else check.subtype = TYPE_REGULAR;
+
   // If component might be a capacitor
   if(check.found == COMP_NONE || check.found == COMP_RESISTOR) {
     // Tell user to be patient with large caps
@@ -795,7 +896,7 @@ void loop() {
       break;
 
     case COMP_IGBT:
-      showIGBT();
+      showIgbt();
       break;
 
     case COMP_THYRISTOR:
@@ -868,6 +969,10 @@ byte shortedProbes(byte probe1, byte probe2) {
   // Read voltages
   v1 = readVoltage(probe1, 1);
   v2 = readVoltage(probe2, 1);
+#ifdef DEBUG_PRINT
+//  Serial.println(v1);
+//  Serial.println(v2);
+#endif
 
 //   We expect both probe voltages to be about the same and
 //   to be half of Vcc (allowed difference +/- 30mV).
@@ -882,15 +987,20 @@ byte shortedProbes(byte probe1, byte probe2) {
 
  // Check for a short circuit between all probes
 byte allProbesShorted(void) {
+  byte s = 0;
+  
   // Check all possible combinations
-  return shortedProbes(TP1, TP2) + shortedProbes(TP1, TP3) + shortedProbes(TP2, TP3);
+  s = shortedProbes(TP1, TP2);
+  s += shortedProbes(TP1, TP3);
+  s += shortedProbes(TP2, TP3);
+  return s;
 }
 
 // Control the DUT relay
 byte connectDevice(boolean state) {
-  pinMode(DISCHARGE_RELAY, OUTPUT);
-  if(state) digitalWrite(DISCHARGE_RELAY, LOW);
-  else digitalWrite(DISCHARGE_RELAY, HIGH);
+  pinMode(PROT_RELAY, OUTPUT);
+  if(state) digitalWrite(PROT_RELAY, LOW);
+  else digitalWrite(PROT_RELAY, HIGH);
   delay(100);
   return allProbesShorted();
 }
@@ -1167,6 +1277,7 @@ void checkProbes(byte probe1, byte probe2, byte probe3) {
       }
     }
 
+
 //   If there's conduction between probe-1 and probe-2 we might have a
 //    - diode (conducting)
 //    - small resistor (checked later on)
@@ -1272,6 +1383,7 @@ unsigned long getHFeCommonCollector(byte type) {
   unsigned int vREmitter;                 // Voltage across emitter resistor
   unsigned int vRBase;                    // Voltage across base resistor
   unsigned int rInternal;                 // Internal resistance of µC
+  unsigned int vRBaseMax = 0;
 
 //   Measure hFE for a BJT in common collector circuit
 //   (emitter follower):
@@ -1300,6 +1412,8 @@ unsigned long getHFeCommonCollector(byte type) {
     vREmitter = VREF_VCC - readVoltage5ms(probes.pin1); // vREmitter = Vcc - ve
     vRBase = readVoltage(probes.pin3, 1); // vRBase = vb
   }
+
+  if(vRBase > vRBaseMax) vRBaseMax = vRBase;
   if(vRBase < 10) {                       // I_b < 14µA -> Darlington
     // Change base resistor from rLow to rHigh and measure again
     if(type == TYPE_NPN) {                // NPN
@@ -1326,7 +1440,7 @@ unsigned long getHFeCommonCollector(byte type) {
     hFe *= 10;                            // Upscale to 0.1
     hFe /= (R_LOW * 10) + rInternal;      // / rEmitter in 0.1 Ohm
     check.subtype = TYPE_DARLINGTON;
-  } else {                                // I_b > 14µA -> standard
+ } else {                                // I_b > 14µA -> standard
 
 //     Both resistors are the same (rEmitter = rBase):
 //      - hFE = ((vREmitter / rEmitter) - (vRBase / rBase)) / (vRBase / rBase)
@@ -1659,6 +1773,7 @@ void checkBjtMosFet(byte bjtType, unsigned int vRLow) {
   unsigned int iCeo;                      // Leakage current
   unsigned long hFeCommonCollector;       // hFE (common collector)
   unsigned long hFeCommonEmitter;         // hFE (common emitter)
+
   // Init, set probes and measure
   if(bjtType == TYPE_NPN) {               // NPN / n-channel
     bjtLevel = 2557;                      // Voltage across base resistor (5.44µA)
@@ -1731,7 +1846,6 @@ void checkBjtMosFet(byte bjtType, unsigned int vRLow) {
 
     // Get hFE for common collector circuit
     hFeCommonCollector = getHFeCommonCollector(bjtType);
-
     // Keep largest hFE
     if(hFeCommonCollector > hFeCommonEmitter) hFeCommonEmitter = hFeCommonCollector;
 
@@ -2269,7 +2383,7 @@ void checkResistor(void) {
               // Check if the reversed measurement is within a specific tolerance
               // Set lower and upper tolerance limits
               // < 2 Ohm
-              if(cmpValue(value, scale, 2, 0) == -1) {
+              if(compareValue(value, scale, 2, 0) == -1) {
                 temp = value / 2;         // 50%
               } else {                    // >= 2 Ohm
                 temp = value / 20;        // 5%
@@ -2279,15 +2393,15 @@ void checkResistor(void) {
 
               // Special case for very low resistance
               // < 0.1 Ohm
-              if(cmpValue(value, scale, 1, -1) == -1) {
+              if(compareValue(value, scale, 1, -1) == -1) {
                 value1 = 0;               // 0
                 value2 = value * 5;       // 500%
                 if(value2 == 0) value2 = 5; // Special case
               }
 
               // Check if value matches given tolerance
-              if((cmpValue(resistor->value, resistor->scale, value1, scale) >= 0) &&
-                  (cmpValue(resistor->value, resistor->scale, value2, scale) <= 0)) {
+              if((compareValue(resistor->value, resistor->scale, value1, scale) >= 0) &&
+                  (compareValue(resistor->value, resistor->scale, value2, scale) <= 0)) {
                 check.found = COMP_RESISTOR;
                 n = 100;                  // End loop and signal match
               } else {                    // No match
@@ -2318,7 +2432,7 @@ void checkResistor(void) {
 }
 
 // Compare two scaled values
-signed char cmpValue(unsigned long value1, signed char scale1, unsigned long value2, signed char scale2) {
+signed char compareValue(unsigned long value1, signed char scale1, unsigned long value2, signed char scale2) {
   signed char flag;                       // Return value
   signed char len1, len2;                 // Length
 
@@ -2509,6 +2623,7 @@ byte largeCap(Capacitors *cap) {
 byte smallCap(Capacitors *cap) {
   byte flag = 3;                          // Return value
   byte tempByte;                          // Temp. value
+  byte samples;
   signed char scale;                      // Capacitance scale
   unsigned int ticks;                     // Timer counter
   unsigned int ticks2;                    // Timer overflow counter
@@ -2530,12 +2645,14 @@ byte smallCap(Capacitors *cap) {
   ticks2 = 0;                             // Reset timer overflow counter
 
   // Init hardware, prepare probes
+  samples = parameters.samples;
   dischargeProbes();                      // Try to discharge probes
   if(check.found == COMP_ERROR) return 0; // Skip on error
-
+    parameters.samples = samples;
   // Set probes: Gnd -- all probes / Gnd -- RHigh -- probe-1
   R_PORT = 0;                             // Set resistor port to low
 
+  parameters.samples = 1;
   // Set ADC probe pins to output mode
   ADC_DDR = (1 << TP1) | (1 << TP2) | (1 << TP3);
   setAdcLow();                            // Set ADC port to low
@@ -2699,6 +2816,7 @@ byte smallCap(Capacitors *cap) {
       if((offset > -50) && (offset < 50)) parameters.compOffset = offset;
     }
   }
+  parameters.samples = samples;
   return flag;
 }
 
@@ -2728,7 +2846,7 @@ void measureCap(byte probe1, byte probe2, byte id) {
           ((resistor->a == probe2) && (resistor->b == probe1))) {
 
         // Check for low value
-        if(cmpValue(resistor->value, resistor->scale, 10UL, 0) == -1)
+        if(compareValue(resistor->value, resistor->scale, 10UL, 0) == -1)
           tempByte = 99;                  // Signal low resistance and end loop
       }
       tempByte++;                         // Next one
@@ -2939,7 +3057,7 @@ byte measureInductor(Resistors *resistor) {
   if(resistor == NULL) return test;
 
   // Limit resistor to 2k (feasibilty & prevent variable overflow)
-  if(cmpValue(resistor->value, resistor->scale, 2000, 0) >= 0) return test;
+  if(compareValue(resistor->value, resistor->scale, 2000, 0) >= 0) return test;
 
 //   Manage measurements:
 //    - run in immediate and delayed mode to deal with capacitive effects
@@ -2952,7 +3070,7 @@ byte measureInductor(Resistors *resistor) {
   test = measureInductance(&time1, mode);
   if(test == 2) {                         // Inductance too low
     // If resistance < 40 Ohms we may run the high current test
-    if(cmpValue(resistor->value, resistor->scale, 40, 0) < 0) {
+    if(compareValue(resistor->value, resistor->scale, 40, 0) < 0) {
       mode = MODE_HIGH_CURRENT;
       test = measureInductance(&time1, mode);
     }
@@ -3133,36 +3251,33 @@ void shortCircuit(byte mode) {
   }
 }
 
-// Detect keypress of test push button
+// Detect keypress of push buttons
 byte testKey() {
-  byte i;
+  char i;
 
   if(gogohut) {
-    if(digitalRead(TEST_BUTTON) == LOW) {
+    if(digitalRead(CONT_BUTTON) == LOW) {
       lcd_clear();
       lcd.print(F("Leaving continuous"));
       lcd_setcursor(0, 1);
-       lcd.print(F("   mode. You may"));
-      lcd_setcursor(0, 2);
-       lcd.print(F("release the button"));
-    while(digitalRead(TEST_BUTTON) == LOW);
-      delay(1000);
-      gogohut = 0;
-      return 0;
-    } else {
+      lcd.print(F("mode. Release button"));
+      while(digitalRead(CONT_BUTTON) == LOW);
       delay(500);
-      return 1;
+      gogohut = 0;
     }
+    return 0;
   }
   for(;;) {
-    i = testButton.timeup();
-    if(!i) {
-      delay(10);
-      continue;
+    i = testButton.read();
+    if(i > 0) return 1;
+    i = caliButton.read();
+    if(i > 0) return 2;
+    i = contButton.read();
+    if(i > 0) {
+      gogohut = 1;
+      return 1;
     }
-    if(i >= SEC5_PRESS) return 2;
-    else if(i >= SEC1_PRESS) gogohut = 1;
-    return 1;
+    delay(50);
   }
 }
 
@@ -3188,7 +3303,7 @@ void showError() {
 }
 
 // Display Uf of a diode
-void showDiode_Uf(Diodes *diode) {
+void showDiode_Vf(Diodes *diode) {
   // Sanity check
   if(diode == NULL) return;
 
@@ -3210,41 +3325,118 @@ void showDiode_C(Diodes *diode) {
 
 // Show diode
 void showDiode(void) {
-  Diodes *D1;                             // Pointer to diode #1
-  Diodes *D2 = NULL;                      // Pointer to diode #2
-  byte SkipFlag = 0;                      // Flag for anti-parallel diodes
-  byte A = 5;                             // id of common anode
-  byte C = 5;                             // id of common cothode
+  Diodes *d1;                             // Pointer to diode #1
+  Diodes *d2 = NULL;                      // Pointer to diode #2
+  byte ap = 0;                            // Flag for anti-parallel diodes
+  int vfa, vfb;                           // Forward voltage drops to check for Zener
+  byte zen = 0;
+  byte a = 5;                             // id of common anode
+  byte c = 5;                             // id of common cothode
+  byte s[6] = { ' ', ' ', ' ', ' ', ' ', ' ' }; // Symbols to display.
   unsigned int iLeak;                     // Leakage current
 
-  D1 = &diodes[0];                        // Pointer to first diode
+  d1 = &diodes[0];                        // Pointer to first diode
 
   // Figure out which diodes to display
   if(check.diodes == 1) {                 // Single diode
-    C = D1->c;                            // Make anode first pin
-  } else {                                // To many diodes
-    D1 = NULL;                            // Don't display any diode
+    c = d1->c;                            // Make anode first pin
+  } else if (check.diodes == 2) {         // Two diodes
+    d2 = d1;
+    d2++;                                 // Pointer to second diode
+    if (d1->a == d2->a)                   // Common anode
+      a = d1->a;                           // Save common anode
+    else if (d1->c == d2->c)              // Common cathode
+      c = d1->c;                          // Save common cathode
+    //Anti-parallel
+    else if ((d1->a == d2->c) && (d1->c == d2->a))   
+    {
+      a = d1->a;                          // Anode and cathode
+      c = c;                              // Are the same 
+      ap = 1;                       // Signal anti-parallel diodes
+    }
+  } else if (check.diodes == 3) {         // Three diodes
+    byte n;
+    byte m;
+
+//     Two diodes in series are additionally detected as third big diode:
+//      - Check for any possible way of 2 diodes be connected in series.
+//      - Only once the cathode of diode #1 matches the anode of diode #2.
+
+    for (n = 0; n <= 2; n++) {            // Loop for first diode
+      d1 = &diodes[n];                    // Get pointer of first diode 
+      for (m = 0; m <= 2; m++) {          // Loop for second diode 
+        d2 = &diodes[m];                  // Get pointer of second diode
+        if (n != m) {                     // Don't check same diode
+          if (d1->c == d2->a) {           // Got match
+            n = 5;                        // End loops
+            m = 5;
+          }
+        }
+      }
+    }
+    if (n < 5) d2 = NULL;                 // No match found 
+    c = d1->c;                            // Cathode of first diode 
+    a = 3;                                // In series mode 
+   } else {                               // Too many diodes
+    d1 = NULL;                            // Don't display any diode
     showFail();                           // And tell user
     return;
   }
-  lcd_createChar(5, symDIODE1);
-  lcd_createChar(6, symDIODE2);
-  lcd_createChar(7, symF);
-  lcd_createChar(2, symLOW1);
-  lcd_createChar(3, symLOW2);
-  lcd_createChar(4, symR);
-  lcd_createChar(0, symV);
-  lcd_createChar(1, symI);
+  lcd_createChar(4, symDIODEAK);
+  s[2] = 4;
+  if(d2 == NULL) {
+    lcd_createChar(2, symDIODESA);
+    lcd_createChar(6, symDIODESK);
+    s[0] = 2;
+    s[4] = 6;
+  } else if(ap || a == 3) {
+    lcd_createChar(2, symDIODECA1);
+    lcd_createChar(3, symDIODECA2);
+    s[0] = 2;
+    s[1] = 3;
+  } else if(ap || c == 3) {
+    lcd_createChar(6, symDIODECK1);
+    lcd_createChar(7, symDIODECK2);
+    s[4] = 6;
+    s[5] = 7;
+  }
+  if(ap) {
+      vfa = max(d1->vF, d2->vF);
+      vfb = min(d1->vF, d2->vF);
+      if(vfa < 800 && vfb >= 1100) {
+        zen = 1;
+      }
+  }
+  if(zen) {
+    lcd_createChar(5, symDIODEZ);
+    s[3] = 5;
+  } else if(d2 != NULL) {
+    if(ap || a < 3 && c < 3) {
+      lcd_createChar(5, symDIODEKA);
+      s[3] = 5;
+    } else {
+      lcd_createChar(5, symDIODEAK);
+      s[3] = 5;      
+    }
+  }
+  lcd_createChar(0, symF);
+  lcd_createChar(1, symR);
   lcd_clear();
-  lcd.print(F("Diode"));
-  lcd_setcursor(19, 0);
-  lcd_testpin(D1->a);                     // Display pin #1
+  if(zen) lcd.print(F("Zener diode"));
+  else lcd.print(F("Diode"));
+  lcd_setcursor(17, 1);
+  lcd.write((byte) s[0]);
+  lcd.write((byte) s[1]);
+  lcd_setcursor(17, 2);
+  lcd.write((byte) s[2]);
+  lcd.write((byte) s[3]);
+  lcd_setcursor(17, 3);
+  lcd.write((byte) s[4]);
+  lcd.write((byte) s[5]);
   lcd_setcursor(19, 1);
-  lcd.write(5);
-  lcd_setcursor(19, 2);
-  lcd.write(6);
+  lcd_testpin(d1->a);                     // Display pin #1
   lcd_setcursor(19, 3);
-  lcd_testpin(D1->c);                     // Display pin #2
+  lcd_testpin(d1->c);                     // Display pin #2
   lcd_setcursor(0, 1);                    // Move to line #1
 
 
@@ -3253,33 +3445,42 @@ void showDiode(void) {
 //    - reverse leakage current
 //    - capacitance
 
-  // Uf
-  lcd.write((byte) 0);
-  lcd.write((byte) 7);
-  lcd.print(F("= "));
-  showDiode_Uf(D1);                       // First diode
-  lcd_setcursor(0, 2);
-  // Display low current Uf
-  lcd.write((byte) 0);
-  lcd.write((byte) 7);
-  lcd.write((byte) 2);
-  lcd.write((byte) 3);
-  lcd.print(F(" = "));
-  displayValue(D1->vF2, -3, 'V');
+  // Vf
+  if(zen) {
+    lcd.write('V');
+    lcd.write((byte) 0);
+    lcd.print(F("= "));
+    displayValue(vfb, -3, 'V');
+    showDiode_Vf(d1);                       // First diode
+    lcd_setcursor(0, 2);
+    // Display Vz
+    lcd.print(F("Vz = "));
+    displayValue(vfa, -3, 'V');
+  } else {
+    lcd.write('V');
+    lcd.write((byte) 0);
+    lcd.print(F("= "));
+    showDiode_Vf(d1);                       // First diode
+    lcd_setcursor(0, 2);
+    // Display low current Vf
+    lcd.write('V');
+    lcd.write((byte) 0);
+    lcd.print(F("low = "));
+    displayValue(d1->vF2, -3, 'V');
 
-  // Reverse leakage current
-  updateProbes(D1->c, D1->a, 0);          // Reverse diode
-  iLeak = getLeakageCurrent();            // Get current (in µA)
-  lcd_setcursor(0, 3);
-  lcd.write((byte) 1);
-  lcd.write((byte) 4);
-  lcd.print(F("= "));
-  displayValue(iLeak, -6, 'A');           // Display current
-
+    // Reverse leakage current
+    updateProbes(d1->c, d1->a, 0);          // Reverse diode
+    iLeak = getLeakageCurrent();            // Get current (in µA)
+    lcd_setcursor(0, 3);
+    lcd.write('I');
+    lcd.write((byte) 1);
+    lcd.print(F("= "));
+    displayValue(iLeak, -6, 'A');           // Display current
+  }
   // Capacitance
   lcd.write(' ');
   lcd.print(F("C = "));
-  showDiode_C(D1);                        // First diode
+  showDiode_C(d1);                        // First diode
 }
 
 // Show BJT
@@ -3405,45 +3606,56 @@ void showBjt(void) {
   // wdt_reset();
 }
 
-// Show MOSFET/IGBT extras
-void showFetIGBT_Extras(byte Symbol) {
-  // Instrinsic diode
-  lcd_clear();
-  if(check.diodes > 0) {
-    lcd.write(' ');                       // Display space
-    lcd.write(Symbol);                    // Display diode symbol
-  }
-
-  // Gate threshold voltage
-  lcd_setcursor(0, 1);
-  lcd.print(F("Vth = "));
-  displayValue(fet.vTh, -3, 'V');         // Display vTh in mV
-  lcd_setcursor(0, 2);
-  // Display gate capacitance
-  lcd.print(F("Cgs = "));                 // Display: Cgs=
-  measureCap(fet.g, fet.s, 0);            // Measure capacitance
-  // Display value and unit
-  displayValue(caps[0].value, caps[0].scale, 'F');
-}
-
 // Show FET
 void showFet(void) {
   byte data;                              // Temp. data
-  byte Symbol;                            // Intrinsic diode
 
   // Set variables based on channel mode
-  if(check.type & TYPE_N_CHANNEL)         // n-channel
+  if(check.type & TYPE_N_CHANNEL) {       // n-channel
     data = 'N';
-  else                                    // p-channel
+    lcd_createChar(5, symMosFet5N);
+    lcd_createChar(7, symMosFet7N);
+  } else {                                // p-channel
     data = 'P';
-  // Display type
+    lcd_createChar(5, symMosFet5P);
+    lcd_createChar(7, symMosFet7P);
+  }
+ // Display type
   if(check.type & TYPE_MOSFET) {          // MOSFET
-    lcd.print(F("MOS"));
-    lcd.print(F("FET"));
+    lcd_createChar(1, symMosFet1);
+    lcd_createChar(2, symMosFet2);
+    lcd_createChar(3, symMosFet3);
+    if(check.type & (TYPE_ENHANCEMENT | TYPE_MOSFET))
+      lcd_createChar(4, symMosFet4E);
+    else
+      lcd_createChar(4, symMosFet4D);
+    lcd_createChar(6, symMosFet6);
+    lcd_setcursor(0, 0);
+    lcd.print(F("MOSFET "));
   // Display channel type
-    lcd_setcursor(0, 1);
     lcd.write(data);                      // Display: N / P
-    lcd.print(F("-channel"));
+    lcd.print(F("-channel "));
+    lcd_setcursor(16, 2);
+    lcd.write(3);
+    lcd.write(4);
+    lcd.write(5);
+    lcd_setcursor(17, 1);
+    lcd.write(1);
+    lcd.write(2);
+    lcd_setcursor(17, 3);
+    lcd.write(6);
+    lcd.write(7);
+    lcd_setcursor(14, 2);
+    lcd_testpin(fet.g);                     // Display gate pin
+    lcd_setcursor(19, 1);
+    if(data == 'N') lcd_testpin(fet.d);     // Display drain pin
+    else lcd_testpin(fet.s);                // Display source pin
+    lcd_setcursor(19, 3);
+    if(data == 'N') lcd_testpin(fet.s);     // Display source pin
+    else lcd_testpin(fet.d);                // Display drain pin
+    lcd_setcursor(0, 1);
+    if(check.type & TYPE_ENHANCEMENT) lcd.print(F("enhancement mode"));
+    else lcd.print(F("depletion mode"));
   } else  {                               // JFET symJFET
     if(data == 'P')
       lcd_createChar(4, symPFetG);
@@ -3452,8 +3664,6 @@ void showFet(void) {
     lcd_createChar(5, symFet);
     lcd_createChar(6, symJFetT);
     lcd_createChar(7, symJFetB);
-    if(check.type == TYPE_NPN) lcd_createChar(2, symNPN);
-    else lcd_createChar(2, symPNP);
     lcd_setcursor(16, 2);
     lcd.write(4);
     lcd.write(5);
@@ -3470,82 +3680,113 @@ void showFet(void) {
     lcd.print(F("Tran. JFET "));
     lcd.write(data);
     lcd.print(F("-channel"));
-    lcd_setcursor(0, 1);
-    lcd.print(F("Cannot"));
     lcd_setcursor(0, 2);
-    lcd.print(F("identify S/D"));
+    lcd.print(F("No S/D data"));
     lcd_setcursor(0, 3);
-    lcd.print(F("for a JFET"));
+    lcd.print(F("for JFETs"));
     lcd_setcursor(2, 3);
     lcd.print(F("r"));
-    return;
   }
-  // Display mode
-  if(check.type & TYPE_MOSFET) {          // MOSFET
-    lcd_setcursor(0, 1);
-    if(check.type & TYPE_ENHANCEMENT)     // Enhancement mode
-      lcd.print(F("Enhancement"));
-    else                                  // Depletion mode
-      lcd.print(F("Depletion"));
-  }
-  // Pins
-  lcd_setcursor(0, 2);                    // Move to line #2
-  lcd.print(F("GDS = "));
-  lcd_testpin(fet.g);                     // Display gate pin
-  lcd_testpin(fet.d);                     // Display drain pin
-  lcd_testpin(fet.s);                     // Display source pin
 
   // Extra data for MOSFET in enhancement mode
   if(check.type & (TYPE_ENHANCEMENT | TYPE_MOSFET)) {
     // Show diode, vTh and Cgs
-    showFetIGBT_Extras(Symbol);
+    // Gate threshold voltage
+    lcd_setcursor(0, 2);
+    lcd.print(F("Vth = "));
+    displayValue(fet.vTh, -3, 'V');         // Display vTh in mV
+    lcd_setcursor(0, 3);
+    // Display gate capacitance
+    lcd.print(F("Cgs = "));                 // Display: Cgs=
+    measureCap(fet.g, fet.s, 0);            // Measure capacitance
+    // Display value and unit
+    displayValue(caps[0].value, caps[0].scale, 'F');
   }
 }
 
 // Show IGBT
-void showIGBT(void) {
+void showIgbt(void) {
   byte data;                              // Temp. data
-  byte Symbol;                            // Intrinsic diode
-  // Set variables based on channel mode
-  if(check.type & TYPE_N_CHANNEL)         // n-channel
-    data = 'N';
-  else                                    // p-channel
-    data = 'P';
-  lcd.print(F("IGBT"));                   // Display: IGBT
-  // Display channel type
-  lcd.write(' ');
-  lcd.write(data);                        // Display: N / P
-  lcd.print(F("-channel"));
+
+  lcd.print(F("Trn IGBT "));              // Display: IGBT
   // Display mode
-  lcd_setcursor(0, 1);
   if(check.type & TYPE_ENHANCEMENT)       // Enhancement mode
     lcd.print(F("Enhancement"));
   else                                    // Depletion mode
     lcd.print(F("Depletion"));
-  // Pins
-  lcd_setcursor(0, 2);                    // Move to line #2
-  lcd.print(F("GCE = "));
+    lcd_createChar(1, symIGBT1);
+    lcd_createChar(2, symIGBT2);
+    lcd_createChar(3, symIGBT3);
+    lcd_createChar(4, symIGBT4);
+    lcd_createChar(5, symIGBT5);
+    lcd_createChar(6, symIGBT6);
+    lcd_createChar(7, symIGBT7);
+    lcd_setcursor(16, 2);
+    lcd.write(3);
+    lcd.write(4);
+    lcd.write(5);
+    lcd_setcursor(17, 1);
+    lcd.write(1);
+    lcd.write(2);
+    lcd_setcursor(17, 3);
+    lcd.write(6);
+    lcd.write(7);
+  lcd_setcursor(14, 2);
   lcd_testpin(fet.g);                     // Display gate pin
+  lcd_setcursor(19, 1);
   lcd_testpin(fet.d);                     // Display collector pin
+  lcd_setcursor(19, 3);
   lcd_testpin(fet.s);                     // Display emitter pin
   // Show diode, vTh and C_CE
-  showFetIGBT_Extras(Symbol);
+    // Instrinsic diode
+  if(check.diodes > 0) {
+      lcd_setcursor(0, 3);
+      lcd.print("Int. diode");
+  }
+  // Gate threshold voltage
+  lcd_setcursor(0, 1);
+  lcd.print(F("Vth = "));
+  displayValue(fet.vTh, -3, 'V');         // Display vTh in mV
+  lcd_setcursor(0, 2);
+  // Display gate capacitance
+  lcd.print(F("Cge = "));                 // Display: Cgs=
+  measureCap(fet.g, fet.s, 0);            // Measure capacitance
+  // Display value and unit
+  displayValue(caps[0].value, caps[0].scale, 'F');
 }
 
-// Show special components like Thyristor and Triac
+// Show special components thyristor and triac
 void showSpecial(void) {
   // Display component type
   if(check.found == COMP_THYRISTOR) {
     lcd.print(F("Thyristor"));
+    lcd_createChar(5, symTHY3);
+    lcd_createChar(6, symTHY1);
+    lcd_createChar(7, symTHY2);
+    lcd_setcursor(16, 2);
+    lcd.write(5);
+    lcd.write(7);
+    lcd_setcursor(17, 1);
+    lcd.write(6);
   } else if(check.found == COMP_TRIAC) {
-    lcd.print(F("Triac"));                // Display: triac
+    lcd.print(F("Triac"));
+    lcd_createChar(5, symTRI1);
+    lcd_createChar(6, symTRI2);
+    lcd_createChar(7, symTRI3);
+    lcd_setcursor(16, 2);
+    lcd.write(7);
+    lcd_setcursor(16, 1);
+    lcd.write(5);
+    lcd.write(6);
+  } else {
+    lcd.print(F("Martian"));    
   }
-  // Display pins
-  lcd_setcursor(0, 2);                    // Move to line #2
-  lcd.print(F("GAC = "));                 // Display: GAK
-  lcd_testpin(bjt.b);                     // Display gate pin
-  lcd_testpin(bjt.c);                     // Display anode pin
-  lcd_testpin(bjt.e);                     // Display cathode pin
+  lcd_setcursor(14, 2);
+  lcd_testpin(bjt.b);                   // Display gate pin
+  lcd_setcursor(17, 3);
+  lcd_testpin(bjt.e);                   // Display cathode pin
+  lcd_setcursor(17, 0);
+  lcd_testpin(bjt.c);                   // Display anode pin
 }
 
 // Show resistor
@@ -3609,7 +3850,7 @@ void showCapacitor(void) {
   for (cnt = 1; cnt <= 2; cnt++)
   {
     cap++;                                // Next cap
-    if(cmpValue(cap->value, cap->scale, maxCap->value, maxCap->scale) == 1)
+    if(compareValue(cap->value, cap->scale, maxCap->value, maxCap->scale) == 1)
     {
       maxCap = cap;
     }
@@ -3653,10 +3894,11 @@ void loadAdjust(void) {
   }
 }
 
-// Selftest
+// Diagnostics
 void runDiagnostics(void) {
+  byte d;
   byte test = 1;                          // Test counter
-  byte cnt;                               // Loop counter
+  char cnt;                               // Loop counter
   byte shorts;                            // Number of probes shorted - 0 or 3 are good
   unsigned int value0;                    // Voltage/value
   // Voltages/values
@@ -3670,41 +3912,89 @@ void runDiagnostics(void) {
   lcd.print(F("  Please stand by"));
   shorts = connectDevice(0);              // Make sure DUT probes are shorted
   if(shorts != 3) {                       // Relay fault - not all probes shorted
-    displayFault(10 + shorts);
+//    displayFault(10 + shorts);
   }
   // Loop through all tests
+  lcd_clear_line(3);
+  d = 0;
   while (test <= 5) {
-    cnt = 1;
-    // Repeat each test 5 times
-    while (cnt < 5) {
+    cnt = 0;
+    // Repeat each test 4 times
+    while (cnt < 2) {
       // Tests
+      lcd_clear_line(3);
+      lcd_setcursor(d, 3);
+      lcd.write(0xdb);
+      lcd.write(0xff);
+      lcd.write(0xdb);
+      d++;
+      if(d == 18) {
+        d = 0;
+      }
       switch (test) {
         case 1:                           // Resistance of probe leads (probes shorted)
            // The resistance is for two probes in series and we expect it to be
            // smaller than 1.00 Ohms, i.e. 0.50 Ohms for a single probe
           updateProbes(TP2, TP1, 0);
           value1 = smallResistor(0);
+#ifdef DEBUG_PRINT
+ //         Serial.println(value1);
+#endif
           if(value1 >= 100) {             // Too high, > 1.0 ohm
             displayFault(1);
           }
+      lcd_clear_line(3);
+      lcd_setcursor(d, 3);
+      lcd.write(0xdb);
+      lcd.write(0xff);
+      lcd.write(0xdb);
+      d++;
+      if(d == 18) {
+        d = 0;
+      }
           updateProbes(TP3, TP1, 0);
           value2 = smallResistor(0);
+#ifdef DEBUG_PRINT
+//          Serial.println(value2);
+#endif
           if(value2 >= 100) {             // Too high, > 1.0 ohm
             displayFault(2);
           }
+      lcd_clear_line(3);
+      lcd_setcursor(d, 3);
+      lcd.write(0xdb);
+      lcd.write(0xff);
+      lcd.write(0xdb);
+      d++;
+      if(d == 18) {
+        d = 0;
+      }
           updateProbes(TP3, TP2, 0);
           value3 = smallResistor(0);
+#ifdef DEBUG_PRINT
+//          Serial.println(value3);
+#endif
           if(value3 >= 100) {             // Too high, > 1.0 ohm
             displayFault(3);
           }
+#ifdef DEBUG_PRINT
+ //         Serial.println("Diag 1 complete");
+#endif
           break;
 
         case 2:                           // Un-short probes
           shorts = connectDevice(1);      // Make sure DUT probes are not shorted
+#ifdef DEBUG_PRINT
+//          Serial.print("shorts ");
+//          Serial.println(shorts);
+#endif
           if(shorts != 0) {               // Relay fault - some probes are shorted
             displayFault(20 + shorts);
           }
           cnt = 100;                      // Skip test
+#ifdef DEBUG_PRINT
+//          Serial.println("Diag 2 complete");
+#endif
           break;
 
         case 3:                           // RHigh resistors pulled down
@@ -3712,12 +4002,34 @@ void runDiagnostics(void) {
           R_PORT = 0;
           R_DDR = 2 << (TP1 * 2);
           value1 = readVoltage20ms(TP1);
+          if(value1 >= 10) {              // Too high, > 10mV
+            displayFault(4);
+          }
+#ifdef DEBUG_PRINT
+ //         Serial.println(value1);
+#endif
           // TP1: Gnd -- RHigh -- probe
           R_DDR = 2 << (TP2 * 2);
           value2 = readVoltage20ms(TP2);
+          if(value2 >= 10) {              // Too high, > 10mV
+            displayFault(5);
+          }
+#ifdef DEBUG_PRINT
+//          Serial.println(value2);
+#endif
           // TP1: Gnd -- RHigh -- probe
           R_DDR = 2 << (TP3 * 2);
           value3 = readVoltage20ms(TP3);
+#ifdef DEBUG_PRINT
+//          Serial.println(value3);
+#endif
+          if(value3 >= 10) {              // Too high, > 10mV
+            displayFault(6);
+          }
+          delay(300);
+#ifdef DEBUG_PRINT
+ //         Serial.println("Diag 3 complete");
+#endif
           break;
 
         case 4:                           // RHigh resistors pulled up
@@ -3725,33 +4037,123 @@ void runDiagnostics(void) {
           R_DDR = 2 << (TP1 * 2);
           R_PORT = 2 << (TP1 * 2);
           value1 = readVoltage20ms(TP1);
+#ifdef DEBUG_PRINT
+//          Serial.println(value1);
+#endif
+          if(value1 < 4920) {             // Too high, > 10mV
+            displayFault(7);
+          }
           // TP1: probe -- RHigh -- Vcc
           R_DDR = 2 << (TP2 * 2);
           R_PORT = 2 << (TP2 * 2);
           value2 = readVoltage20ms(TP2);
+#ifdef DEBUG_PRINT
+ //         Serial.println(value2);
+#endif
+          if(value2 < 4920) {             // Too high, > 10mV
+            displayFault(8);
+          }
           // TP1: probe -- RHigh -- Vcc
           R_DDR = 2 << (TP3 * 2);
           R_PORT = 2 << (TP3 * 2);
           value3 = readVoltage20ms(TP3);
+#ifdef DEBUG_PRINT
+ //         Serial.println(value3);
+#endif
+          if(value3 < 4920) {             // Too high, > 10mV
+            displayFault(9);
+          }
+          delay(300);
+#ifdef DEBUG_PRINT
+//          Serial.println("Diag 4 complete");
+#endif
           break;
 
         case 5:                           // Capacitance offset (PCB and probe leads)
           // The capacitance is for two probes and we expect it to be less than 100pF.
           measureCap(TP2, TP1, 0);
           value1 = (unsigned int)caps[0].raw;
+#ifdef DEBUG_PRINT
+ //         Serial.println(value1);
+#endif
+          if(value1 < 10) {               // Too low, < 10pF
+            displayFault(16);
+          }
+          if(value1 >= 70) {              // Too high, > 70pF
+            displayFault(13);
+          }
+      lcd_clear_line(3);
+      lcd_setcursor(d, 3);
+      lcd.write(0xdb);
+      lcd.write(0xff);
+      lcd.write(0xdb);
+      d++;
+      if(d == 18) {
+        d = 0;
+      }
           measureCap(TP3, TP1, 1);
           value2 = (unsigned int)caps[1].raw;
+#ifdef DEBUG_PRINT
+  //        Serial.println(value2);
+#endif
+          if(value2 < 10) {               // Too low, < 10pF
+            displayFault(17);
+          }
+          if(value2 >= 70) {              // Too high, > 70pF
+            displayFault(14);
+          }
+      lcd_clear_line(3);
+      lcd_setcursor(d, 3);
+      lcd.write(0xdb);
+      lcd.write(0xff);
+      lcd.write(0xdb);
+      d++;
+      if(d == 18) {
+        d = 0;
+      }
           measureCap(TP3, TP2, 2);
           value3 = (unsigned int)caps[2].raw;
+#ifdef DEBUG_PRINT
+ //         Serial.println(value3);
+#endif
+          if(value3 < 10) {               // Too low, < 10pF
+            displayFault(18);
+          }
+          if(value3 >= 70) {              // Too high, > 70pF
+            displayFault(15);
+          }
+#ifdef DEBUG_PRINT
+ //         Serial.println("Diag 5 complete");
+#endif
           break;
       }
       // Reset ports to defaults
+
+      setAdcHighZ();                      // Input mode
+      setAdcLow();                        // All pins low
+      R_DDR = 0;                          // Input mode
+      R_PORT = 0;                         // All pins low
       R_DDR = 0;                          // Input mode
       R_PORT = 0;                         // All pins low
       cnt++;                              // Next run
     }
+    setAdcHighZ();                        // Input mode
+    setAdcLow();                          // All pins low
+    R_DDR = 0;                            // Input mode
+    R_PORT = 0;                           // All pins low
     test++;                               // Next one
   }
+  lcd_clear();
+  showIgbt();
+  delay(2000);
+  lcd_clear();
+  check.found = COMP_THYRISTOR;
+  showSpecial();
+  delay(2000);
+  lcd_clear();
+  check.found = COMP_TRIAC;
+  showSpecial();
+  delay(2000);
   return;                                 // Success (if it fails, displayFault() never returns).
 }
 
@@ -3794,7 +4196,7 @@ void displayFault(byte fail) {
       lcd.print(F("Relay failure short"));
       lcd_setcursor(0, 2);
       lcd.print(F("mode - "));
-      lcd.write((char) '0' + fail - 10);
+      lcd.write((char) '3' - (fail - 10));
       lcd.print(F(" open"));
       break;
 
@@ -3807,6 +4209,15 @@ void displayFault(byte fail) {
       lcd.write((char) '0' + fail - 12);
       break;
 
+    case 16:
+    case 17:
+    case 18:
+      lcd.print(F("Probe capacitance"));
+      lcd_setcursor(0, 2);
+      lcd.print(F("too low probe "));
+      lcd.write((char) '0' + fail - 15);
+      break;
+
     case 21:
     case 22:
     case 23:
@@ -3817,7 +4228,8 @@ void displayFault(byte fail) {
       lcd.print(F(" shorted"));
       break;
   }
-  for(;;) delay(1000);
+  testKey();
+//  for(;;) delay(1000);
 }
 
 // Self adjustment
