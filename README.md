@@ -7,21 +7,23 @@ Test many types of semiconductors, resistors, capacitors, inductors, etc.
 
 Full list:
 
-RESISTORS
+Resistors
 
-CAPACITORS
+Capacitors
 
-INDUCTORS
+Inductors
 
-DIODES
+Diodes
 
-BJTS (Bipolar Junction Transistors):
+Zever diodes
+
+BJTs (Bipolar Junction Transistors):
 
     Regular
   
     Darlington pair
   
-FETS:
+FETs:
 
     JFET
   
@@ -31,12 +33,11 @@ FETS:
     
         depletion mode
     
-IGBTS (Insulated Gate Bipolar Transistor)
+IGBTs (Insulated Gate Bipolar Transistor)
 
-TRIACS
+Triacs
 
-THYRISTORS
-
+Thyristors
 
 Based on Ardutester and earlier works. Uses the ButtonCtl Arduino library (in my Github). Includes hardware design schematic and PCB layout in Eagle format.
 The DUT inputs are relay protected against charged capacitors being inserted.
