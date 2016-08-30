@@ -15,7 +15,7 @@ Inductors
 
 Diodes
 
-Double diodes, common a/c and inverse-parallel
+Double diodes, common a/c, series, and inverse-parallel
 
 Zever diodes
 
