@@ -26,7 +26,7 @@
 #define VERSION "0.1"
 #define EC 12
  
-// #define DEBUG_PRINT                       // Print on Serial Port
+#define DEBUG_PRINT                       // Print on Serial Port
 
 // Button press times in deciseconds (from ButtonCtl library)
 #define SEC1_PRESS 10                     // Button Long Press
@@ -1998,7 +1998,7 @@ byte checkThyristorTriac(void) {
 //   Check for a thyristor (SCR) or triac
 //    - A thyristor conducts also after the gate is discharged as long
 //      as the load current stays alive and doesn't reverse polarity.
-//    - A triac is a pair of anti-parallel thyristors.
+//    - A triac is a pair of inverse-parallel thyristors.
 //    - It's possible that the tester doesn't deliver enough current, so
 //      it can't detect all types.
 // 
@@ -3323,164 +3323,264 @@ void showDiode_C(Diodes *diode) {
   displayValue(caps[0].value, caps[0].scale, 'F');
 }
 
+#define TOP_LEFT 0
+#define TOP_RIGHT 1
+#define BOTTOM_LEFT 2
+#define BOTTOM_RIGHT 3
+#define DIR_UP 4
+#define DIR_DOWN 5
+#define COMMON_ANODE 6
+#define COMMON_CATHODE 7
+
 // Show diode
 void showDiode(void) {
   Diodes *d1;                             // Pointer to diode #1
   Diodes *d2 = NULL;                      // Pointer to diode #2
-  byte ap = 0;                            // Flag for anti-parallel diodes
+  byte inverseParallel = 0;               // Inverse-parallel diodes
   int vfa, vfb;                           // Forward voltage drops to check for Zener
-  byte zen = 0;
+  byte zenerDiode = 0;                    // Zener diode
+  byte d2Direction = 0;                   // Which way a second diode points.
+  byte commonAOrC = 0;                    // Which connection - a or c - is shared, if any.
+  byte series = 0;                        // Diodes in series.
+  char ac[4] = { ' ', ' ', ' ', ' ' };    // Pin display - top left, right, bottom left, right.
   byte a = 5;                             // id of common anode
   byte c = 5;                             // id of common cothode
   byte s[6] = { ' ', ' ', ' ', ' ', ' ', ' ' }; // Symbols to display.
+  byte n, m;
   unsigned int iLeak;                     // Leakage current
 
   d1 = &diodes[0];                        // Pointer to first diode
 
-  // Figure out which diodes to display
-  if(check.diodes == 1) {                 // Single diode
-    c = d1->c;                            // Make anode first pin
-  } else if (check.diodes == 2) {         // Two diodes
-    d2 = d1;
-    d2++;                                 // Pointer to second diode
-    if (d1->a == d2->a)                   // Common anode
-      a = d1->a;                           // Save common anode
-    else if (d1->c == d2->c)              // Common cathode
-      c = d1->c;                          // Save common cathode
-    //Anti-parallel
-    else if ((d1->a == d2->c) && (d1->c == d2->a))   
-    {
-      a = d1->a;                          // Anode and cathode
-      c = c;                              // Are the same 
-      ap = 1;                       // Signal anti-parallel diodes
-    }
-  } else if (check.diodes == 3) {         // Three diodes
-    byte n;
-    byte m;
+  // Figure out which diodes to display, and which pins where
+  switch(check.diodes) {
+    case 1:                               // Single diode
+      ac[TOP_LEFT] = '1' + d1->a;         // Top left
+      ac[BOTTOM_LEFT] = '1' + d1->c;      // Bottom left
+      break;
 
-//     Two diodes in series are additionally detected as third big diode:
-//      - Check for any possible way of 2 diodes be connected in series.
-//      - Only once the cathode of diode #1 matches the anode of diode #2.
+    case 2:                               // Two diodes
+      d2 = d1;
+      d2++;                               // Pointer to second diode
+      if (d1->a == d2->a) {               // Common anode
+        commonAOrC = COMMON_ANODE;
+        ac[TOP_LEFT] = '1' + d1->a;       // Top left
+        ac[BOTTOM_LEFT] = '1' + d1->c;    // Bottom left
+        ac[BOTTOM_RIGHT] = '1' + d2->c;   // Bottom right
+        d2Direction = DIR_DOWN;           // Second diode cathode down
+        break;
+      } else if (d1->c == d2->c) {        // Common cathode
+        commonAOrC = COMMON_CATHODE;
+        ac[BOTTOM_LEFT] = '1' + d1->c;    // Bottom left
+        ac[TOP_LEFT] = '1' + d1->a;       // Top left
+        ac[TOP_RIGHT] = '1' + d2->a;      // Top left
+        d2Direction = DIR_DOWN;           // Second diode cathode down
+        break;
+      // Inverse-parallel
+      } else if ((d1->a == d2->c) && (d1->c == d2->a)) {
+        vfa = max(d1->vF, d2->vF);
+        vfb = min(d1->vF, d2->vF);
+        if(vfb < 800 && vfa >= 1100) {
+          zenerDiode = 1;
+          if(vfa == d1->vF) {
+            ac[TOP_LEFT] = '1' + d1->a;
+            ac[BOTTOM_LEFT] = '1' + d1->c;
+          } else {
+            ac[TOP_LEFT] = '1' + d1->c;
+            ac[BOTTOM_LEFT] = '1' + d1->a;
+          }
+          d2Direction = DIR_DOWN;           // Irrelevant for a Zener, really.
+        } else {
+          ac[TOP_LEFT] = '1' + d1->a;
+          ac[BOTTOM_LEFT] = '1' + d1->c;
+          inverseParallel = 1;              // Signal inverse-parallel diodes
+          d2Direction = DIR_UP;
+        }
+        break;
 
-    for (n = 0; n <= 2; n++) {            // Loop for first diode
-      d1 = &diodes[n];                    // Get pointer of first diode 
-      for (m = 0; m <= 2; m++) {          // Loop for second diode 
-        d2 = &diodes[m];                  // Get pointer of second diode
-        if (n != m) {                     // Don't check same diode
-          if (d1->c == d2->a) {           // Got match
-            n = 5;                        // End loops
-            m = 5;
+      }
+/* FALL THRU */
+    case 3:                               // Three diodes
+//     Two diodes in series are additionally detected as third diode.
+//     Check for any possible way of 2 diodes be connected in series.
+//     When the cathode of diode #1 matches the anode of diode #2,
+//     then those two are the real diodes.
+      for (n = 0; n < check.diodes; n++) {          // Loop for first diode
+        d1 = &diodes[n];                  // Get pointer of first diode 
+        for (m = 0; m < check.diodes; m++) {        // Loop for second diode 
+          d2 = &diodes[m];                // Get pointer of second diode
+          if (n != m) {                   // Don't check same diode
+            if (d1->c == d2->a) {         // Got match
+              ac[TOP_LEFT] = '1' + d1->a;
+              ac[TOP_RIGHT] = '1' + d2->c;
+              ac[BOTTOM_LEFT] = '1' + d1->c;
+              series = 1;
+              d2Direction = DIR_UP;
+              break;
+            }
           }
         }
+        if(series) break;
+      }
+      break;
+
+    default:                              // Too many diodes
+      d1 = NULL;                          // Don't display any diode
+      showFail();                         // And tell user
+      return;
+      break;
+  }
+
+// Layout of symbols using s[] is:
+//
+//  0 1
+//  2 3
+//  4 5
+//
+  if(zenerDiode) {
+    lcd_createChar(5, symDIODEZ);         // Zener symbol, cathode up.
+    s[2] = 5;                             // Body, first diode.
+    lcd_createChar(2, symDIODESA);        // Single cathode connection (use anode because
+    lcd_createChar(6, symDIODESK);        // all but Zener point down), and single anode connection.
+    s[0] = 2;                             // Top connection, first diode.
+    s[4] = 6;                             // Bottom connection, first diode.
+  } else if(d2 != NULL) {                 // Not Zener, and there is a second diode.
+    lcd_createChar(4, symDIODEAK);        // Diode symbol, cathode down.
+    s[2] = 4;                             // Body, first diode.
+    if(inverseParallel) {                 // Second diode points the other way.
+      lcd_createChar(5, symDIODEKA);      // Diode symbol, cathode up.
+      s[3] = 5;                           // Body, second diode.
+      lcd_createChar(2, symDIODECA1);     // Common top connection
+      lcd_createChar(3, symDIODECA2);     // for diodes.
+      s[0] = 2;                           // Top connection, first diode.
+      s[1] = 3;                           // Top connection, second diode.
+      lcd_createChar(6, symDIODECK1);     // Common bottom connection
+      lcd_createChar(7, symDIODECK2);     // for diodes.
+      s[4] = 6;                           // Bottom connection, first diode.
+      s[5] = 7;                           // Bottom connection, second diode.
+    }                                     // Second diode is either common anode or common cathode
+    if(series) {                          // Second diode points the other way.
+      lcd_createChar(5, symDIODEKA);      // Diode symbol, cathode up.
+      s[3] = 5;                           // Body, second diode.
+      lcd_createChar(2, symDIODESA);      // Separate top connection
+      lcd_createChar(3, symDIODESA);      // for diodes.
+      s[0] = 2;                           // Top connection, first diode.
+      s[1] = 3;                           // Top connection, second diode.
+      lcd_createChar(6, symDIODECK1);     // Common bottom connection
+      lcd_createChar(7, symDIODECK2);     // for diodes.
+      s[4] = 6;                           // Bottom connection, first diode.
+      s[5] = 7;                           // Bottom connection, second diode.
+    }                                     // Second diode is either common anode or common cathode
+    if(commonAOrC) {                      // Second diode points the same way.
+      lcd_createChar(5, symDIODEAK);      // Diode symbol, cathode down.
+      s[3] = 5;                           // Body, second diode.
+      if(commonAOrC == COMMON_ANODE) {    // Common anode
+        lcd_createChar(2, symDIODECA1);   // Common top connection
+        lcd_createChar(3, symDIODECA2);   // for diodes.
+        s[0] = 2;                         // Top connection, first diode.
+        s[1] = 3;                         // Top connection, second diode.
+        lcd_createChar(6, symDIODESK);    // Separate bottom connection
+        lcd_createChar(7, symDIODESK);    // for diodes.
+        s[4] = 6;                         // Bottom connection, first diode.
+        s[5] = 7;                         // Bottom connection, second diode.
+      } else {                            // Common cathode
+        lcd_createChar(2, symDIODESA);    // Separate top connection
+        lcd_createChar(3, symDIODESA);    // for diodes.
+        s[0] = 2;                         // Top connection, first diode.
+        s[1] = 3;                         // Top connection, second diode.
+        lcd_createChar(6, symDIODECK1);   // Common bottom connection
+        lcd_createChar(7, symDIODECK2);   // for diodes.
+        s[4] = 6;                         // Bottom connection, first diode.
+        s[5] = 7;                         // Bottom connection, second diode.
       }
     }
-    if (n < 5) d2 = NULL;                 // No match found 
-    c = d1->c;                            // Cathode of first diode 
-    a = 3;                                // In series mode 
-   } else {                               // Too many diodes
-    d1 = NULL;                            // Don't display any diode
-    showFail();                           // And tell user
-    return;
+  } else {                                // Single diode
+    lcd_createChar(4, symDIODEAK);        // Diode symbol, cathode down.
+    s[2] = 4;                             // Body, first diode.
+    lcd_createChar(2, symDIODESA);        // Single anode connection and
+    lcd_createChar(6, symDIODESK);        // single cathode connection.
+    s[0] = 2;                             // Top connection, first diode.
+    s[4] = 6;                             // Bottom connection, first diode.
   }
-  lcd_createChar(4, symDIODEAK);
-  s[2] = 4;
-  if(d2 == NULL) {
-    lcd_createChar(2, symDIODESA);
-    lcd_createChar(6, symDIODESK);
-    s[0] = 2;
-    s[4] = 6;
-  } else if(ap || a == 3) {
-    lcd_createChar(2, symDIODECA1);
-    lcd_createChar(3, symDIODECA2);
-    s[0] = 2;
-    s[1] = 3;
-  } else if(ap || c == 3) {
-    lcd_createChar(6, symDIODECK1);
-    lcd_createChar(7, symDIODECK2);
-    s[4] = 6;
-    s[5] = 7;
-  }
-  if(ap) {
-      vfa = max(d1->vF, d2->vF);
-      vfb = min(d1->vF, d2->vF);
-      if(vfa < 800 && vfb >= 1100) {
-        zen = 1;
-      }
-  }
-  if(zen) {
-    lcd_createChar(5, symDIODEZ);
-    s[3] = 5;
-  } else if(d2 != NULL) {
-    if(ap || a < 3 && c < 3) {
-      lcd_createChar(5, symDIODEKA);
-      s[3] = 5;
-    } else {
-      lcd_createChar(5, symDIODEAK);
-      s[3] = 5;      
-    }
-  }
+  // Now we have the pins identified, and the symbols laid out.
+  // Make sub-f and sub-r symbols.
   lcd_createChar(0, symF);
   lcd_createChar(1, symR);
+
+  // Display diode data.
   lcd_clear();
-  if(zen) lcd.print(F("Zener diode"));
+  if(zenerDiode) lcd.print(F("Zener diode"));
+  else if(inverseParallel) lcd.print(F("Inverse //-diode"));
+  else if(commonAOrC == COMMON_ANODE) lcd.print(F("Common A diodes"));
+  else if(commonAOrC == COMMON_CATHODE) lcd.print(F("Common C diodes"));
+  else if(series) lcd.print(F("Series diodes"));
   else lcd.print(F("Diode"));
   lcd_setcursor(17, 1);
-  lcd.write((byte) s[0]);
+  lcd.write((byte) s[0]);                 // Top connection(s).
   lcd.write((byte) s[1]);
   lcd_setcursor(17, 2);
-  lcd.write((byte) s[2]);
+  lcd.write((byte) s[2]);                 // Diode symbol(s).
   lcd.write((byte) s[3]);
   lcd_setcursor(17, 3);
-  lcd.write((byte) s[4]);
+  lcd.write((byte) s[4]);                 // Bottom connection(s).
   lcd.write((byte) s[5]);
+  // Display pin numbers.
+  lcd_setcursor(16, 1);
+  lcd.write(ac[0]);
   lcd_setcursor(19, 1);
-  lcd_testpin(d1->a);                     // Display pin #1
+  lcd.write(ac[1]);
+  lcd_setcursor(16, 3);
+  lcd.write(ac[2]);
   lcd_setcursor(19, 3);
-  lcd_testpin(d1->c);                     // Display pin #2
-  lcd_setcursor(0, 1);                    // Move to line #1
+  lcd.write(ac[3]);  
 
-
-//   display:
-//    - Uf (forward voltage)
-//    - reverse leakage current
-//    - capacitance
-
-  // Vf
-  if(zen) {
+  lcd_setcursor(0, 1);
+  if(zenerDiode) {                        // Vf, Vz and C for a Zener.
     lcd.write('V');
     lcd.write((byte) 0);
-    lcd.print(F("= "));
+    lcd.print(F(" = "));
     displayValue(vfb, -3, 'V');
-    showDiode_Vf(d1);                       // First diode
     lcd_setcursor(0, 2);
     // Display Vz
     lcd.print(F("Vz = "));
     displayValue(vfa, -3, 'V');
-  } else {
-    lcd.write('V');
-    lcd.write((byte) 0);
-    lcd.print(F("= "));
-    showDiode_Vf(d1);                       // First diode
-    lcd_setcursor(0, 2);
-    // Display low current Vf
-    lcd.write('V');
-    lcd.write((byte) 0);
-    lcd.print(F("low = "));
-    displayValue(d1->vF2, -3, 'V');
-
-    // Reverse leakage current
-    updateProbes(d1->c, d1->a, 0);          // Reverse diode
-    iLeak = getLeakageCurrent();            // Get current (in µA)
+    // Capacitance
     lcd_setcursor(0, 3);
-    lcd.write('I');
-    lcd.write((byte) 1);
-    lcd.print(F("= "));
-    displayValue(iLeak, -6, 'A');           // Display current
+    lcd.print(F("C = "));                 // Display capacitance
+    showDiode_C(d1);
+  } else {                                // Vf for a single diode, or Vf(a) for the first of two.
+    lcd.write('V');
+    lcd.write((byte) 0);
+    if(d2 != NULL) lcd.print(F("(a) = "));
+    else lcd.print(F(" = "));
+    showDiode_Vf(d1);
+    lcd_setcursor(0, 2);                  // Display low current Vf low for a single diode,
+    lcd.write('V');                       // or Vf(b) for the second diode of two.
+    lcd.write((byte) 0);
+    if(d2 != NULL) {
+      lcd.print(F("(b) = "));
+      showDiode_Vf(d2);
+      if(inverseParallel || commonAOrC || series) { // Identify which diode is a, and which is b.
+        lcd_setcursor(17, 0);
+        lcd.print(F("ab"));
+      }
+    } else {
+      lcd.write('V');
+      lcd.write((byte) 0);
+      lcd.print(F("low = "));
+      displayValue(d1->vF2, -3, 'V');
+      // For a single diode, display reverse leakage current and capacitance
+      updateProbes(d1->c, d1->a, 0);      // Reverse diode
+      iLeak = getLeakageCurrent();        // Get current (in µA)
+      lcd_setcursor(0, 3);
+      lcd.write('I');
+      lcd.write((byte) 1);
+      lcd.print(F("= "));
+      displayValue(iLeak, -6, 'A');       // Display current
+      // Capacitance
+      lcd.print(F(" C = "));               // Display capacitance
+      showDiode_C(d1);
+    }
   }
-  // Capacitance
-  lcd.write(' ');
-  lcd.print(F("C = "));
-  showDiode_C(d1);                        // First diode
 }
 
 // Show BJT
@@ -3741,7 +3841,7 @@ void showIgbt(void) {
     // Instrinsic diode
   if(check.diodes > 0) {
       lcd_setcursor(0, 3);
-      lcd.print("Int. diode");
+      lcd.print(F("Int. diode"));
   }
   // Gate threshold voltage
   lcd_setcursor(0, 1);
@@ -3910,9 +4010,10 @@ void runDiagnostics(void) {
   lcd.print(F("Running diagnostics"));
   lcd_setcursor(0, 2);
   lcd.print(F("  Please stand by"));
+  return;
   shorts = connectDevice(0);              // Make sure DUT probes are shorted
   if(shorts != 3) {                       // Relay fault - not all probes shorted
-//    displayFault(10 + shorts);
+    displayFault(10 + shorts);
   }
   // Loop through all tests
   lcd_clear_line(3);
