@@ -15,6 +15,8 @@ Inductors
 
 Diodes
 
+Double diodes, common a/c and inverse-parallel
+
 Zever diodes
 
 BJTs (Bipolar Junction Transistors):
