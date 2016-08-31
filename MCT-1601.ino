@@ -24,7 +24,7 @@
  */
 
 #define VERSION "0.1"
-#define EC 12
+#define EC 13
  
 #define DEBUG_PRINT                       // Print on Serial Port
 
@@ -293,6 +293,9 @@ Bjts bjt;                                 // Bipolar junction transistor
 Fets fet;                                 // FET
 Inductors inductor;                       // Inductor
 
+
+const byte symPara[8]     PROGMEM = { B00010010, B00010010, B00010010, B00010010,
+                                      B00010010, B00010010, B00010010, B00000000 };
 
 const byte symProt1[8]    PROGMEM = { B00000000, B00000000, B00000000, B00000000,
                                       B00000000, B00011100, B00000100, B00000100 };
@@ -704,7 +707,7 @@ void setup() {
   // Init
   runDiagnostics();                       // If it returns, diags. passed, so carry on
   connectDevice(0);                       // Short out the test points
-  loadAdjust();                           // Load adjustment values
+  loadCalibration();                           // Load calibration values
 
 #ifdef DEBUG_PRINT
   Serial.print(F("Nikol MCT-1601"));
@@ -712,8 +715,7 @@ void setup() {
   Serial.println(F("Based on Ardutester by PighiXXX & PaoloP"));
   Serial.println(F("from original version by Markus Reschke"));
   Serial.println();
-  Serial.println(F("Press Button to Probe"));
-  Serial.println(F("Long press to adjust and save"));
+  Serial.println(F("Press test button to test DUT"));
 #endif
 }
 
@@ -749,7 +751,7 @@ void loop() {
   connectDevice(1);                       // Turn on relay (connect DUT to tester)
   if(test == 2) {                         // Long Press
     wdt_disable();                        // Disable watchdog
-    adjustAndSave();                      // Calibrate
+    calibrateAndSave();                      // Calibrate
     return;
   }  
  // if(!gogohut) lcd_clear();
@@ -2770,7 +2772,7 @@ byte smallCap(Capacitors *cap) {
     cap->raw = raw;
     cap->value = value;                   // Max. 5.1*10^6pF or 125*10^3nF
 
-//     Self-adjust the voltage offset of the analog comparator and internal
+//     Self-calibrate the voltage offset of the analog comparator and internal
 //     bandgap reference if C is 100nF up to 20µF. The minimum of 100nF
 //     should keep the voltage stable long enough for the measurements.
 //     Changed offsets will be used in next test run.
@@ -2779,7 +2781,7 @@ byte smallCap(Capacitors *cap) {
       signed int              offset;
       signed long             tempLong;
 
-//       We can self-adjust the offset of the internal bandgap reference
+//       We can self-calibrate the offset of the internal bandgap reference
 //       by measuring a voltage lower than the bandgap reference, one time
 //       with the bandgap as reference and a second time with Vcc as
 //       reference. The common voltage source is the cap we just measured.
@@ -3504,13 +3506,17 @@ void showDiode(void) {
   // Now we have the pins identified, and the symbols laid out.
   // Make sub-f and sub-r symbols.
   lcd_createChar(0, symF);
-  lcd_createChar(1, symR);
+  if(inverseParallel) lcd_createChar(1, symPara);
+  else lcd_createChar(1, symR);
 
   // Display diode data.
   lcd_clear();
   if(zenerDiode) lcd.print(F("Zener diode"));
-  else if(inverseParallel) lcd.print(F("Inverse //-diode"));
-  else if(commonAOrC == COMMON_ANODE) lcd.print(F("Common A diodes"));
+  else if(inverseParallel) {
+    lcd.print(F("Inverse-"));
+    lcd.write((byte) 1);
+    lcd.print(F(" diodes"));
+  } else if(commonAOrC == COMMON_ANODE) lcd.print(F("Common A diodes"));
   else if(commonAOrC == COMMON_CATHODE) lcd.print(F("Common C diodes"));
   else if(series) lcd.print(F("Series diodes"));
   else lcd.print(F("Diode"));
@@ -3545,8 +3551,15 @@ void showDiode(void) {
     displayValue(vfa, -3, 'V');
     // Capacitance
     lcd_setcursor(0, 3);
-    lcd.print(F("C = "));                 // Display capacitance
-    showDiode_C(d1);
+    lcd.print(F("C  = "));                 // Display capacitance
+    // Get capacitance of d1
+    measureCap(d1->c, d1->a, 0);
+    // Get capacitance of d2
+    measureCap(d2->c, d2->a, 1);
+    // And show the higher capacitance
+    if(compareValue(caps[0].value, caps[0].scale, caps[1].value, caps[1].scale) == 1)
+      displayValue(caps[0].value, caps[0].scale, 'F');
+    else displayValue(caps[1].value, caps[1].scale, 'F');
   } else {                                // Vf for a single diode, or Vf(a) for the first of two.
     lcd.write('V');
     lcd.write((byte) 0);
@@ -3562,6 +3575,19 @@ void showDiode(void) {
       if(inverseParallel || commonAOrC || series) { // Identify which diode is a, and which is b.
         lcd_setcursor(17, 0);
         lcd.print(F("ab"));
+      }
+      if(inverseParallel) {
+        // Capacitance
+        lcd_setcursor(0, 3);
+        lcd.print(F("C(ab) = "));                 // Display capacitance
+        // Get capacitance of d1
+        measureCap(d1->c, d1->a, 0);
+        // Get capacitance of d2
+        measureCap(d2->c, d2->a, 1);
+        // And show the higher capacitance
+        if(compareValue(caps[0].value, caps[0].scale, caps[1].value, caps[1].scale) == 1)
+          displayValue(caps[0].value, caps[0].scale, 'F');
+        else displayValue(caps[1].value, caps[1].scale, 'F');
       }
     } else {
       lcd.write('V');
@@ -3978,8 +4004,8 @@ void showCapacitor(void) {
   displayValue(maxCap->value, maxCap->scale, 'F');
 }
 
-// Load adjustment values
-void loadAdjust(void) {
+// Load calibration values
+void loadCalibration(void) {
   if(EEPROM.read(PARAM_MAGIC) == ROM_MAGIC) {
     ReadEEP();
   } else {
@@ -4010,7 +4036,6 @@ void runDiagnostics(void) {
   lcd.print(F("Running diagnostics"));
   lcd_setcursor(0, 2);
   lcd.print(F("  Please stand by"));
-  return;
   shorts = connectDevice(0);              // Make sure DUT probes are shorted
   if(shorts != 3) {                       // Relay fault - not all probes shorted
     displayFault(10 + shorts);
@@ -4333,8 +4358,8 @@ void displayFault(byte fail) {
 //  for(;;) delay(1000);
 }
 
-// Self adjustment
-byte selfAdjust(void) {
+// Self calibration
+byte selfCalibrate(void) {
   byte flag = 0;                          // Return value
   byte test = 1;                          // Test counter
   byte cnt;                               // Loop counter
@@ -4566,14 +4591,14 @@ byte selfAdjust(void) {
   }
 
   // Show values and offsets
-  showAdjust();
-  if(flag == 4) flag = 1;                 // All adjustments done -> success
+  showCalibration();
+  if(flag == 4) flag = 1;                 // All calibrations done -> success
   else flag = 0;                          // Signal error
   return flag;
 }
 
-// Show adjustment values and offsets
-void showAdjust(void) {
+// Show calibration values and offsets
+void showCalibration(void) {
   // Display rIntLow and rIntHigh
   lcd_clear();
   lcd.print(F("R int Lo "));
@@ -4639,12 +4664,12 @@ void ReadEEP(void) {
   parameters.compOffset = EEPROM.read(PARAM_COMPOFFSET);
 }
 
-void adjustAndSave(void) {
+void calibrateAndSave(void) {
   lcd_clear();
   lcd_setcursor(0, 0);
   lcd.print(F("Calibrating..."));
   delay(1000);
-  selfAdjust();
+  selfCalibrate();
   lcd_clear();
   lcd.print(F("Saving..."));
   delay(1000);
