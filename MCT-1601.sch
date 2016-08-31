@@ -4767,7 +4767,7 @@ Source: http://www.diodes.com/datasheets/ds23001.pdf</description>
 <part name="GND3" library="supply1" deviceset="GND" device=""/>
 <part name="J3" library="SparkFun-Connectors" deviceset="M08" device="" value="D I/O"/>
 <part name="K1" library="relay" deviceset="351" device=""/>
-<part name="D1" library="diode" deviceset="DIODE-" device="D-2.5"/>
+<part name="D1" library="diode" deviceset="DIODE-" device="D-2.5" value="1N4148"/>
 </parts>
 <sheets>
 <sheet>
@@ -4799,7 +4799,10 @@ Source: http://www.diodes.com/datasheets/ds23001.pdf</description>
 <instance part="K1" gate="1" x="190.5" y="71.12"/>
 <instance part="K1" gate="2" x="144.78" y="81.28" rot="MR90"/>
 <instance part="K1" gate="3" x="144.78" y="60.96" rot="MR90"/>
-<instance part="D1" gate="G$1" x="182.88" y="71.12" rot="R90"/>
+<instance part="D1" gate="G$1" x="182.88" y="71.12" smashed="yes" rot="R90">
+<attribute name="NAME" x="183.642" y="73.8886" size="1.778" layer="95"/>
+<attribute name="VALUE" x="181.1274" y="66.802" size="1.778" layer="96" rot="R90"/>
+</instance>
 </instances>
 <busses>
 </busses>
